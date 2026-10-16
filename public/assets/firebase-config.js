@@ -1,13 +1,12 @@
 // Konfigurácia Firebase projektu. Tieto hodnoty nie sú tajné – prístup k dátam
 // strážia pravidlá vo firestore.rules a storage.rules.
-// Doplňte ich z Firebase Console → Project settings → Your apps → Web app.
 export const firebaseConfig = {
-  apiKey: "DOPLNIT",
-  authDomain: "darujknihu.firebaseapp.com",
-  projectId: "darujknihu",
-  storageBucket: "darujknihu.firebasestorage.app",
-  messagingSenderId: "DOPLNIT",
-  appId: "DOPLNIT",
+  apiKey: "AIzaSyDqXwkOvRj8mje5DemAwgZSU1cA6QBbOkI",
+  authDomain: "darujknihu-c44b7.firebaseapp.com",
+  projectId: "darujknihu-c44b7",
+  storageBucket: "darujknihu-c44b7.firebasestorage.app",
+  messagingSenderId: "465662340680",
+  appId: "1:465662340680:web:149d094d0998d4f430f27d",
 };
 
 // Na localhost sa web pripojí na lokálne emulátory Firebase (firebase emulators:start).
