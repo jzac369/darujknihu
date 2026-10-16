@@ -213,3 +213,35 @@ table.dev th, table.dev td { text-align: left; padding: 8px; border-bottom: 1px 
 .scanner video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: #000; }
 .scanner-line { position: absolute; left: 10%; right: 10%; top: calc(min(480px, 100vw - 32px) * 0.375); height: 2px; background: var(--stamp); box-shadow: 0 0 12px var(--stamp); }
 .scanner p { margin: 0; font-size: 14px; }
+
+/* Obálky kníh */
+.cover { position: relative; }
+.cover img.real { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.cover-prev { width: 64px; height: 96px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); }
+
+/* Odporúčania */
+.rec { margin-bottom: 28px; }
+.rec .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* Hromadné darovanie */
+.bulk-row { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.bulk-row .cover { width: 48px; padding: 4px 4px 4px 7px; }
+.bulk-row .cover .t { font-size: 8px; }
+.bulk-row .cover .a, .bulk-row .cover .rule { display: none; }
+.bulk-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+.bulk-fields .field { width: 100%; font-size: 14px; padding: 7px 10px; }
+.bulk-fields .mono { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+
+/* Hlásenia a správa */
+details.report { margin-top: 10px; }
+details.report summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details.report form { margin-top: 8px; }
+.admin-card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--surface); display: grid; gap: 10px; }
+.admin-card.open { border-color: var(--stamp); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .bulk-fields { grid-template-columns: 1fr; }
+}

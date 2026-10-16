@@ -3,4 +3,5 @@ export const GENRES = ["Román", "Klasika", "Krimi", "Fantasy", "Sci-fi", "Náu�
 export const CONDITIONS = ["Ako nová", "Veľmi dobrý stav", "Dobrý stav", "Opotrebovaná"];
 export const LANGUAGES = ["sk", "cs", "en", "other"];
 export const RESERVATION_HOURS = 24;
+export const REPORT_REASONS = ["NOT_ARRIVED", "DAMAGED", "NOT_AS_DESCRIBED", "NOT_PICKED_UP", "OTHER"];
 export const SEND_DEADLINE_DAYS = 5;

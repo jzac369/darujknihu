@@ -230,3 +230,111 @@ export const DICT = {
     },
   },
 };
+
+// Texty pre obálky, čakateľov, hromadné darovanie, osobné odovzdanie, hlásenia a odporúčania.
+const peopleSk = (n) => (n === 1 ? "1 čitateľ" : n >= 2 && n <= 4 ? `${n} čitatelia` : `${n} čitateľov`);
+const peopleCs = (n) => (n === 1 ? "1 čtenář" : n >= 2 && n <= 4 ? `${n} čtenáři` : `${n} čtenářů`);
+const booksSk = (n) => (n === 1 ? "1 knihu" : n >= 2 && n <= 4 ? `${n} knihy` : `${n} kníh`);
+const booksCs = (n) => (n === 1 ? "1 knihu" : n >= 2 && n <= 4 ? `${n} knihy` : `${n} knih`);
+
+const EXTRA = {
+  sk: {
+    header: { admin: "Správa" },
+    home: {
+      rec: "Mohlo by sa vám páčiť", recSub: "Podľa kníh, ktoré ste čítali, a vášho wishlistu.",
+      place: { "": "Všade", city: "Moje mesto", SK: "Slovensko", CZ: "Česko" },
+      waiting: (n) => `Čaká ${peopleSk(n)}`,
+    },
+    book: {
+      waiting: (n) => `Na wishliste ju má ${peopleSk(n)}.`,
+      delivery: "Ako knihu prevezmete", byPacketa: "Poštou cez Packetu", byPerson: "Osobne",
+      personalHint: (city) => `Darca je z mesta ${city}. Po objednaní uvidíte kontakty a dohodnete sa na stretnutí. Poštovné neplatí nikto.`,
+      contactName: "Meno a priezvisko",
+    },
+    donate: {
+      modeOne: "Jedna kniha", modeBulk: "Viac kníh naraz",
+      bulkHint: "Napíšte alebo naskenujte čísla viacerých kníh. Údaje doplníme, skontrolujete ich a pridáte všetky naraz.",
+      bulkCodes: "ISBN alebo EAN, každé na nový riadok", bulkAdd: "Pridať do zoznamu", bulkScan: "Skenovať viac kódov",
+      bulkScanHint: "Skenujte knihy jednu po druhej. Keď skončíte, zavrite fotoaparát.",
+      bulkEmpty: "Zoznam je prázdny.", bulkSave: (n) => `Pridať ${booksSk(n)} do katalógu`,
+      bulkSaved: (n) => `Pridali sme ${booksSk(n)} do katalógu.`, bulkScanned: (c) => `Pridané: ${c}`,
+      bulkMissing: "Doplňte názov a autora pri všetkých knihách.", bulkDup: "Toto číslo už v zozname je.",
+      coverFound: "Našli sme aj obálku.",
+      waiting: (n) => `Na wishliste ju má ${peopleSk(n)}`,
+    },
+    ex: {
+      stepsPerson: { CREATED: "Objednané", SENT: "Odovzdané", PICKED_UP: "Prevzaté" },
+      personHow: "Kontaktujte príjemcu a dohodnite sa na osobnom odovzdaní:",
+      personHowIn: (donor, phone) => `${donor} vás bude kontaktovať na čísle ${phone} a dohodnete sa na stretnutí.`,
+      waitHand: (date) => `Odovzdať treba do ${date}.`,
+      handedOver: "Odovzdal som osobne", personSent: "Kniha bola odovzdaná osobne.", confirmPerson: "Prevzal som knihu",
+      report: "Nahlásiť problém", reportReason: "Čo sa stalo?", reportText: "Popíšte to podrobnejšie (nepovinné)",
+      reportSend: "Odoslať hlásenie", reportSent: "Hlásenie sme prijali, správca sa vám ozve.",
+      reported: "Nahlásené, správca to rieši", reportResolved: "Hlásenie je vyriešené",
+      reasons: { NOT_ARRIVED: "Kniha neprišla", DAMAGED: "Kniha je poškodená", NOT_AS_DESCRIBED: "Kniha nezodpovedá popisu", NOT_PICKED_UP: "Príjemca si knihu nevyzdvihol", OTHER: "Iný problém" },
+      donorContact: "Kontakt na darcu",
+    },
+    admin: {
+      title: "Správa hlásení", sub: "Hlásenia problémov od darcov a čitateľov.", none: "Žiadne hlásenia.",
+      open: "Otvorené", resolved: "Vyriešené", by: (n, role) => `${n} (${role === "donor" ? "darca" : "príjemca"})`,
+      order: "Objednávka", donor: "Darca", recipient: "Príjemca", status: "Stav", tracking: "Číslo zásielky",
+      note: "Poznámka správcu", resolve: "Označiť ako vyriešené", reopen: "Znova otvoriť",
+      plusRecipient: "+1 bod príjemcovi", plusDonor: "+1 bod darcovi", minusDonor: "−1 bod darcovi",
+      block: "Zablokovať", unblock: "Odblokovať", blocked: "zablokovaný", done: "Uložené.",
+      points: (n) => `${n} b.`,
+    },
+    auth: { yourId: "Vaše ID používateľa (potrebné na nastavenie správcu)" },
+    common: { blocked: "Váš účet je zablokovaný. Ak ide o omyl, ozvite sa správcovi." },
+  },
+  cs: {
+    header: { admin: "Správa" },
+    home: {
+      rec: "Mohlo by se vám líbit", recSub: "Podle knih, které jste četli, a vašeho wishlistu.",
+      place: { "": "Všude", city: "Moje město", SK: "Slovensko", CZ: "Česko" },
+      waiting: (n) => `Čeká ${peopleCs(n)}`,
+    },
+    book: {
+      waiting: (n) => `Na wishlistu ji má ${peopleCs(n)}.`,
+      delivery: "Jak knihu převezmete", byPacketa: "Poštou přes Zásilkovnu", byPerson: "Osobně",
+      personalHint: (city) => `Dárce je z města ${city}. Po objednání uvidíte kontakty a domluvíte se na setkání. Poštovné neplatí nikdo.`,
+      contactName: "Jméno a příjmení",
+    },
+    donate: {
+      modeOne: "Jedna kniha", modeBulk: "Více knih najednou",
+      bulkHint: "Napište nebo naskenujte čísla více knih. Údaje doplníme, zkontrolujete je a přidáte všechny najednou.",
+      bulkCodes: "ISBN nebo EAN, každé na nový řádek", bulkAdd: "Přidat do seznamu", bulkScan: "Skenovat více kódů",
+      bulkScanHint: "Skenujte knihy jednu po druhé. Až skončíte, zavřete fotoaparát.",
+      bulkEmpty: "Seznam je prázdný.", bulkSave: (n) => `Přidat ${booksCs(n)} do katalogu`,
+      bulkSaved: (n) => `Přidali jsme ${booksCs(n)} do katalogu.`, bulkScanned: (c) => `Přidáno: ${c}`,
+      bulkMissing: "Doplňte název a autora u všech knih.", bulkDup: "Toto číslo už v seznamu je.",
+      coverFound: "Našli jsme i obálku.",
+      waiting: (n) => `Na wishlistu ji má ${peopleCs(n)}`,
+    },
+    ex: {
+      stepsPerson: { CREATED: "Objednáno", SENT: "Předáno", PICKED_UP: "Převzato" },
+      personHow: "Kontaktujte příjemce a domluvte se na osobním předání:",
+      personHowIn: (donor, phone) => `${donor} vás bude kontaktovat na čísle ${phone} a domluvíte se na setkání.`,
+      waitHand: (date) => `Předat je třeba do ${date}.`,
+      handedOver: "Předal(a) jsem osobně", personSent: "Kniha byla předána osobně.", confirmPerson: "Knihu jsem převzal(a)",
+      report: "Nahlásit problém", reportReason: "Co se stalo?", reportText: "Popište to podrobněji (nepovinné)",
+      reportSend: "Odeslat hlášení", reportSent: "Hlášení jsme přijali, správce se vám ozve.",
+      reported: "Nahlášeno, správce to řeší", reportResolved: "Hlášení je vyřešené",
+      reasons: { NOT_ARRIVED: "Kniha nepřišla", DAMAGED: "Kniha je poškozená", NOT_AS_DESCRIBED: "Kniha neodpovídá popisu", NOT_PICKED_UP: "Příjemce si knihu nevyzvedl", OTHER: "Jiný problém" },
+      donorContact: "Kontakt na dárce",
+    },
+    admin: {
+      title: "Správa hlášení", sub: "Hlášení problémů od dárců a čtenářů.", none: "Žádná hlášení.",
+      open: "Otevřená", resolved: "Vyřešená", by: (n, role) => `${n} (${role === "donor" ? "dárce" : "příjemce"})`,
+      order: "Objednávka", donor: "Dárce", recipient: "Příjemce", status: "Stav", tracking: "Číslo zásilky",
+      note: "Poznámka správce", resolve: "Označit jako vyřešené", reopen: "Znovu otevřít",
+      plusRecipient: "+1 bod příjemci", plusDonor: "+1 bod dárci", minusDonor: "−1 bod dárci",
+      block: "Zablokovat", unblock: "Odblokovat", blocked: "zablokovaný", done: "Uloženo.",
+      points: (n) => `${n} b.`,
+    },
+    auth: { yourId: "Vaše ID uživatele (potřebné pro nastavení správce)" },
+    common: { blocked: "Váš účet je zablokovaný. Pokud jde o omyl, ozvěte se správci." },
+  },
+};
+for (const l of ["sk", "cs"]) {
+  for (const [k, v] of Object.entries(EXTRA[l])) DICT[l][k] = { ...(DICT[l][k] || {}), ...v };
+}

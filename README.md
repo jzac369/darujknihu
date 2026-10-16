@@ -37,6 +37,21 @@ Každý krok výmeny zapíše prehliadač ako jednu dávku (batch). Pravidlá vo
 
 Kontakt na doručenie (meno, telefón, výdajné miesto) vidí iba darca a príjemca danej objednávky. Fotka knihy sa zmenší v prehliadači a uloží priamo do ponuky.
 
+## Ďalšie funkcie
+
+- **Hromadné darovanie** (`#/darovat/hromadne`): viac ISBN/EAN naraz alebo skenovanie za sebou, kontrola v zozname a uloženie všetkých kníh jedným klikom.
+- **Obálky:** pri ISBN sa hľadá obálka v Google Books a Open Library; uloží sa ako odkaz. Ak sa nenačíta, zostane farebná obálka s názvom.
+- **Čakatelia:** wishlist sa ukladá súkromne (`wishlist`) a zároveň ako anonymný hľadaný text (`wants`), takže darca aj katalóg ukazujú „Čaká N čitateľov“ bez prezradenia, kto to je.
+- **Filter miesta a osobné odovzdanie:** katalóg sa dá filtrovať na „Moje mesto“, Slovensko alebo Česko. Pri objednaní sa dá zvoliť osobné odovzdanie: darca vidí kontakt, klikne „Odovzdal som osobne“, príjemca potvrdí prevzatie a darca dostane bod.
+- **Odporúčania:** „Mohlo by sa vám páčiť“ podľa autorov a žánrov prečítaných kníh a wishlistu (počíta sa v prehliadači).
+- **Nahlásenie problému a správca:** pri objednávke sa dá nahlásiť problém (neprišla, poškodená, nezodpovedá popisu…). Správca na stránke `#/sprava` vidí hlásenia s detailom objednávky, pripisuje a odoberá body, blokuje účty a hlásenia uzatvára s poznámkou, ktorú nahlasovateľ uvidí. Zablokovaný účet nemôže pridávať knihy ani objednávať.
+
+### Ako nastaviť správcu
+
+1. Prihláste sa na webe a v Profile si skopírujte „Vaše ID používateľa“.
+2. Vo Firebase Console → Firestore → Data vytvorte kolekciu `admins` a v nej dokument s týmto ID (stačí jedno ľubovoľné pole, napríklad `note: "správca"`).
+3. Po obnovení stránky sa v menu objaví „Správa“.
+
 ## ISBN, EAN a skenovanie (`public/assets/isbn.js`)
 
 - Čiarový kód knihy je EAN-13 začínajúci 978/979 – to isté číslo ako ISBN-13. Iný EAN nie je kniha a údaje sa vyplnia ručne.

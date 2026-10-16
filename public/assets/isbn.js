@@ -62,12 +62,37 @@ const SOURCES = [
 ];
 
 export async function lookupIsbn(isbn) {
+  let hit = null;
   for (const source of SOURCES) {
     try {
-      const hit = await source(isbn);
-      if (hit) return { isbn, ...hit };
+      hit = await source(isbn);
+      if (hit) break;
     } catch {}
   }
+  if (!hit) return null;
+  return { isbn, ...hit, cover: await findCover(isbn) };
+}
+
+/* ---------- obálky ---------- */
+
+// Overí, že sa obrázok naozaj načíta (Open Library pri neznámom ISBN vráti chybu, Google malý zástupný obrázok).
+const imageOk = (url) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => resolve(img.naturalWidth > 40 && img.naturalHeight > 60);
+  img.onerror = () => resolve(false);
+  img.src = url;
+  setTimeout(() => resolve(false), 6000);
+});
+
+export async function findCover(isbn) {
+  try {
+    const j = await (await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`)).json();
+    const links = j.items?.[0]?.volumeInfo?.imageLinks;
+    const url = (links?.thumbnail || links?.smallThumbnail || "").replace(/^http:/, "https:").replace("&edge=curl", "");
+    if (url && (await imageOk(url))) return url;
+  } catch {}
+  const ol = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`;
+  if (await imageOk(ol)) return ol;
   return null;
 }
 
