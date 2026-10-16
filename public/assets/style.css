@@ -206,3 +206,10 @@ table.dev th, table.dev td { text-align: left; padding: 8px; border-bottom: 1px 
 .toast { background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 10px; box-shadow: var(--shadow); font-size: 14px; }
 .toast.err { background: var(--stamp); color: #fff; }
 .center { text-align: center; padding: 48px 0; color: var(--muted); }
+
+/* Skener čiarového kódu */
+.scanner { position: fixed; inset: 0; z-index: 70; background: rgba(8, 12, 10, .85); display: grid; place-items: center; padding: 16px; }
+.scanner-in { position: relative; width: min(480px, 100%); display: flex; flex-direction: column; gap: 12px; align-items: center; color: #fff; text-align: center; }
+.scanner video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: #000; }
+.scanner-line { position: absolute; left: 10%; right: 10%; top: calc(min(480px, 100vw - 32px) * 0.375); height: 2px; background: var(--stamp); box-shadow: 0 0 12px var(--stamp); }
+.scanner p { margin: 0; font-size: 14px; }

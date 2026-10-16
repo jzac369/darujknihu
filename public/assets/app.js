@@ -13,6 +13,7 @@ import {
 import { firebaseConfig, useEmulators } from "./firebase-config.js";
 import { DICT } from "./i18n.js";
 import { GENRES, CONDITIONS, LANGUAGES, SEND_DEADLINE_DAYS } from "./constants.js";
+import { parseCode, lookupIsbn, startScanner } from "./isbn.js";
 
 const COVER_COLORS = ["#2F4858", "#7A3B2E", "#3D5A3C", "#5B4B8A", "#8A6A1F", "#1F5C6B", "#6B2F4A", "#44403C", "#3B4F7A", "#6A4E2E"];
 
@@ -113,6 +114,7 @@ function renderHeader() {
 /* ---------- smerovanie ---------- */
 
 function route() {
+  closeScanner();
   routeSubs.forEach((u) => u());
   routeSubs = [];
   renderHeader();
@@ -147,12 +149,15 @@ onAuthStateChanged(auth, (user) => {
   S.ready = false;
   $("#view").innerHTML = `<p class="center">${T().common.loading}</p>`;
   let first = true;
-  userSubs.push(onSnapshot(doc(db, "users", user.uid), (snap) => {
+  // Hneď po registrácii môže prvé čítanie prísť skôr než prihlasovací token a pravidlá ho odmietnu;
+  // vtedy sa odber po chvíli obnoví, inak by web zostal na „Dokončite profil“.
+  const watchProfile = () => userSubs.push(onSnapshot(ref("users", user.uid), (snap) => {
     const hadProfile = !!S.profile;
     S.profile = snap.exists() ? snap.data() : null;
     renderHeader();
     if (first || hadProfile !== !!S.profile) { first = false; S.ready = true; route(); }
-  }));
+  }, () => { if (auth.currentUser?.uid === user.uid) setTimeout(watchProfile, 800); }));
+  watchProfile();
   // Počet vecí, ktoré čakajú na používateľa: odoslať knihu, potvrdiť vyzdvihnutie, rozhodnúť o knihe.
   const todo = { out: 0, in: 0 };
   const setTodo = () => { S.todo = todo.out + todo.in; renderHeader(); };
@@ -322,6 +327,9 @@ function viewDonate() {
         <div><label class="l" for="isbn">${t.isbn}</label>
           <div class="isbn-row"><input class="field" id="isbn" name="isbn" inputmode="numeric" placeholder="978…" autocomplete="off">
           <button class="btn" type="button" data-action="isbn">${t.load}</button></div>
+          <button class="btn small" type="button" data-action="scan" style="margin-top:8px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="vertical-align:-3px"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>
+            ${t.scan}</button>
           <p class="hint" id="isbn-msg" role="status" style="margin:6px 0 0">${t.isbnHint}</p></div>
         <div><label class="l" for="title">${t.titleF}</label><input class="field w" id="title" name="title" required maxlength="200"></div>
         <div><label class="l" for="author">${t.author}</label><input class="field w" id="author" name="author" required maxlength="200"></div>
@@ -346,22 +354,28 @@ function viewDonate() {
   }));
 }
 
-async function lookupIsbn(raw) {
-  const isbn = raw.replace(/[^0-9Xx]/g, "").toUpperCase();
-  if (isbn.length !== 10 && isbn.length !== 13) return null;
-  try {
-    const j = await (await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`)).json();
-    const b = j[`ISBN:${isbn}`];
-    if (b?.title) return { isbn, title: b.title, author: (b.authors || []).map((a) => a.name).join(", ") };
-  } catch {}
-  try {
-    const j = await (await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`)).json();
-    const v = j.items?.[0]?.volumeInfo;
-    if (v?.title) return { isbn, title: v.title, author: (v.authors || []).join(", ") };
-  } catch {}
-  return null;
+// Načíta údaje o knihe podľa ISBN/EAN v políčku a vyplní názov a autora.
+async function fillFromCode(raw) {
+  const t = T().donate;
+  const msg = $("#isbn-msg");
+  const code = parseCode(raw);
+  if (code.invalid) { msg.textContent = t.invalidCode; return; }
+  if (code.ean) { msg.textContent = t.notBook(code.ean); return; }
+  $("#isbn").value = code.isbn;
+  msg.textContent = t.loading;
+  const hit = await lookupIsbn(code.isbn);
+  if (!hit) { msg.textContent = t.notFound; return; }
+  $("#title").value = hit.title;
+  $("#author").value = hit.author;
+  msg.textContent = `${t.loaded} ${hit.title}`;
 }
 
+let stopScan = null;
+function closeScanner() {
+  stopScan?.();
+  stopScan = null;
+  $("#scanner")?.remove();
+}
 /* ---------- wishlist ---------- */
 
 function viewWishlist() {
@@ -533,6 +547,8 @@ const forms = {
     const p = profileData(fd);
     const cred = await createUserWithEmailAndPassword(auth, String(fd.get("email")).trim(), String(fd.get("password")));
     await setDoc(ref("users", cred.user.uid), newProfile(p));
+    S.profile = S.profile || { ...p, points: 0, welcomeGiven: false };
+    S.ready = true;
     go("#/darovat");
   },
   async reset(f, fd) {
@@ -542,7 +558,7 @@ const forms = {
   async profile(f, fd) {
     const p = profileData(fd);
     const r = doc(db, "users", S.user.uid);
-    if (S.profile) await updateDoc(r, p);
+    if (S.profile || (await getDoc(r)).exists()) await updateDoc(r, p);
     else await setDoc(r, newProfile(p));
     toast(T().auth.profileSaved);
     go("#/");
@@ -581,9 +597,9 @@ const forms = {
     const listingId = newId("listings");
     const title = String(fd.get("title")).trim();
     const author = String(fd.get("author")).trim();
-    const isbn = String(fd.get("isbn") || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+    const code = parseCode(fd.get("isbn"));
     const copy = {
-      isbn: isbn.length === 10 || isbn.length === 13 ? isbn : null, title, author,
+      isbn: code.isbn || null, title, author,
       genre: fd.get("genre"), language: fd.get("language"),
       color: COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)],
       createdAt: serverTimestamp(), createdBy: S.user.uid,
@@ -675,17 +691,29 @@ const actions = {
     go("#/");
   },
   lang(el) { store.set("dk-lang", el.dataset.lang); route(); },
-  async isbn() {
+  async isbn() { await fillFromCode($("#isbn").value); },
+  async scan() {
     const t = T().donate;
-    const msg = $("#isbn-msg");
-    msg.textContent = t.loading;
-    const hit = await lookupIsbn($("#isbn").value);
-    if (!hit) { msg.textContent = t.notFound; return; }
-    $("#isbn").value = hit.isbn;
-    $("#title").value = hit.title;
-    $("#author").value = hit.author;
-    msg.textContent = `${t.loaded} ${hit.title}`;
+    closeScanner();
+    const box = document.createElement("div");
+    box.id = "scanner";
+    box.className = "scanner";
+    box.innerHTML = `<div class="scanner-in"><video playsinline muted></video><div class="scanner-line"></div>
+      <p>${t.scanHint}</p><button class="btn" type="button" data-action="closescan">${T().common.cancel}</button></div>`;
+    document.body.appendChild(box);
+    try {
+      stopScan = await startScanner($("video", box), (code) => {
+        closeScanner();
+        $("#isbn").value = code;
+        fillFromCode(code);
+      });
+    } catch (e) {
+      console.error(e);
+      closeScanner();
+      $("#isbn-msg").textContent = t.cameraErr;
+    }
   },
+  closescan() { closeScanner(); },
   async withdraw(el) { await updateDoc(ref("listings", el.dataset.id), { status: "WITHDRAWN" }); },
   async unwish(el) { await deleteDoc(ref("wishlist", el.dataset.id)); },
   // Vyzdvihnutie: objednávka, ponuka, bod pre darcu a záznam v pase knihy naraz.
@@ -750,6 +778,12 @@ document.addEventListener("click", async (e) => {
   } finally {
     el.disabled = false;
   }
+});
+
+// Enter v políčku ISBN načíta údaje namiesto odoslania celého formulára.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.id === "isbn") { e.preventDefault(); fillFromCode(e.target.value); }
+  if (e.key === "Escape") closeScanner();
 });
 
 renderHeader();

@@ -37,6 +37,14 @@ Každý krok výmeny zapíše prehliadač ako jednu dávku (batch). Pravidlá vo
 
 Kontakt na doručenie (meno, telefón, výdajné miesto) vidí iba darca a príjemca danej objednávky. Fotka knihy sa zmenší v prehliadači a uloží priamo do ponuky.
 
+## ISBN, EAN a skenovanie (`public/assets/isbn.js`)
+
+- Čiarový kód knihy je EAN-13 začínajúci 978/979 – to isté číslo ako ISBN-13. Iný EAN nie je kniha a údaje sa vyplnia ručne.
+- 10-miestne ISBN sa overí a prevedie na ISBN-13.
+- Údaje sa hľadajú postupne v **knihovny.cz** (súhrnný katalóg českých knižníc, dobre pokrýva aj slovenské vydania), **Open Library** a **Google Books**. Všetky sú bezplatné a bez kľúča.
+- Slovenská národná knižnica ani Národní knihovna ČR verejné rozhranie dostupné z prehliadača nemajú.
+- Skenovanie fotoaparátom: v Chrome na Androide natívny `BarcodeDetector`, inde knižnica ZXing (`@zxing/browser` z jsDelivr). Funguje len cez HTTPS.
+
 Doprava je v ručnom režime: darca pošle knihu sám cez Packetu (aplikácia alebo packeta.sk / zasilkovna.cz) a zadá číslo zásielky.
 
 ## Nasadenie
