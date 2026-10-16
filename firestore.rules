@@ -1,48 +1,265 @@
 rules_version = '2';
 
-// Body, ponuky, objednávky a pas knihy mení iba server (Cloud Functions).
-// Prehliadač smie zapisovať len vlastný profil, wishlist a označiť upozornenia ako prečítané.
+// DarujKnihu.sk beží na bezplatnom pláne Spark, bez Cloud Functions.
+// Všetky zmeny bodov preto strážia tieto pravidlá: každý krok výmeny je dávka zápisov,
+// ktorú pravidlá pustia len vtedy, keď sedí celá (objednávka, ponuka aj body naraz).
+//
+//  - registrácia: 0 bodov; uvítací bod raz za účet, keď existujú 2 vlastné ponuky,
+//  - objednávka: príjemcovi ubudne presne 1 bod, ponuka sa zmení na CLAIMED,
+//  - vyzdvihnutie: darcovi pribudne presne 1 bod, len raz (stav SENT → PICKED_UP),
+//  - zrušenie: príjemca dostane bod späť (darca kedykoľvek pred odoslaním, príjemca po 5 dňoch).
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function me() { return request.auth.uid; }
     function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
-    function validProfile(d) {
-      return str(d.name, 2, 60) && str(d.city, 2, 60) && d.country in ['SK', 'CZ'];
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function num(d, k) { return d.get(k, 0); }
+    function user(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function userAfter(uid) { return getAfter(/databases/$(database)/documents/users/$(uid)).data; }
+    function order(id) { return get(/databases/$(database)/documents/orders/$(id)).data; }
+    function orderAfter(id) { return getAfter(/databases/$(database)/documents/orders/$(id)).data; }
+    function orderExists(id) { return exists(/databases/$(database)/documents/orders/$(id)); }
+    function listing(id) { return get(/databases/$(database)/documents/listings/$(id)).data; }
+    function listingAfter(id) { return getAfter(/databases/$(database)/documents/listings/$(id)).data; }
+
+    function isGenre(v) { return v in ['Román', 'Klasika', 'Krimi', 'Fantasy', 'Sci-fi', 'Náučná', 'Osobný rozvoj', 'Pre deti', 'Humor']; }
+    function isCondition(v) { return v in ['Ako nová', 'Veľmi dobrý stav', 'Dobrý stav', 'Opotrebovaná']; }
+    function isLang(v) { return v in ['sk', 'cs', 'en', 'other']; }
+    function validProfile(d) { return str(d.name, 2, 60) && str(d.city, 2, 60) && d.country in ['SK', 'CZ']; }
+
+    function copyAfter(d) { return getAfter(/databases/$(database)/documents/copies/$(d.copyId)).data; }
+    function copyMatches(d) {
+      return d.title == copyAfter(d).title && d.author == copyAfter(d).author && d.genre == copyAfter(d).genre
+        && d.language == copyAfter(d).language && d.color == copyAfter(d).color;
+    }
+    // nová kniha: exemplár vzniká v tej istej dávke
+    function newCopy(d) {
+      return d.prevOrder == null
+        && !exists(/databases/$(database)/documents/copies/$(d.copyId))
+        && copyAfter(d).createdBy == me();
+    }
+    // posielam ďalej knihu, ktorú som dostal: objednávka sa v tej istej dávke označí PASS
+    function passedOn(d, id) {
+      return d.prevOrder is string
+        && order(d.prevOrder).recipientUid == me()
+        && order(d.prevOrder).status == 'PICKED_UP'
+        && order(d.prevOrder).copyId == d.copyId
+        && order(d.prevOrder).keep != 'PASS'
+        && orderAfter(d.prevOrder).keep == 'PASS'
+        && orderAfter(d.prevOrder).passListing == id;
     }
 
-    // Verejný profil: meno, mesto, krajina, body a hodnotenie darcu.
+    /* ---------- používatelia ---------- */
+
     match /users/{uid} {
       allow read: if signedIn();
+
       allow create: if signedIn() && me() == uid
-        && request.resource.data.keys().hasOnly(['name', 'city', 'country', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'city', 'country', 'createdAt', 'points', 'welcomeGiven'])
         && validProfile(request.resource.data)
+        && request.resource.data.points == 0
+        && request.resource.data.welcomeGiven == false
         && request.resource.data.createdAt == request.time;
-      allow update: if signedIn() && me() == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'city', 'country'])
-        && validProfile(request.resource.data);
+
+      allow update: if signedIn() && (
+        // úprava profilu
+        (me() == uid && changed().hasOnly(['name', 'city', 'country']) && validProfile(request.resource.data))
+        // uvítací bod: raz, keď používateľ ukáže dve vlastné ponuky
+        || (me() == uid
+            && changed().hasOnly(['points', 'welcomeGiven', 'welcomeListings'])
+            && resource.data.welcomeGiven == false
+            && request.resource.data.welcomeGiven == true
+            && request.resource.data.points == resource.data.points + 1
+            && request.resource.data.welcomeListings is list
+            && request.resource.data.welcomeListings.size() == 2
+            && request.resource.data.welcomeListings[0] != request.resource.data.welcomeListings[1]
+            && listing(request.resource.data.welcomeListings[0]).donorUid == uid
+            && listing(request.resource.data.welcomeListings[1]).donorUid == uid)
+        // objednávka: príjemcovi ubudne 1 bod spolu s vytvorením objednávky
+        || (me() == uid
+            && changed().hasOnly(['points', 'lastOrder'])
+            && resource.data.points >= 1
+            && request.resource.data.points == resource.data.points - 1
+            && !orderExists(request.resource.data.lastOrder)
+            && orderAfter(request.resource.data.lastOrder).recipientUid == uid)
+        // vyzdvihnutie: príjemca pripíše darcovi 1 bod, len pri prechode SENT → PICKED_UP
+        || (changed().hasOnly(['points', 'sentCount', 'lastDelivered'])
+            && request.resource.data.points == resource.data.points + 1
+            && request.resource.data.sentCount == num(resource.data, 'sentCount') + 1
+            && order(request.resource.data.lastDelivered).donorUid == uid
+            && order(request.resource.data.lastDelivered).recipientUid == me()
+            && order(request.resource.data.lastDelivered).status == 'SENT'
+            && orderAfter(request.resource.data.lastDelivered).status == 'PICKED_UP')
+        // zrušenie: príjemca dostane bod späť
+        || (changed().hasOnly(['points', 'lastRefund'])
+            && request.resource.data.points == resource.data.points + 1
+            && order(request.resource.data.lastRefund).recipientUid == uid
+            && order(request.resource.data.lastRefund).status == 'CREATED'
+            && orderAfter(request.resource.data.lastRefund).status == 'CANCELLED'
+            && (me() == order(request.resource.data.lastRefund).donorUid || me() == uid))
+        // hodnotenie darcu
+        || (changed().hasOnly(['ratingSum', 'ratingCount', 'lastRated'])
+            && order(request.resource.data.lastRated).donorUid == uid
+            && order(request.resource.data.lastRated).recipientUid == me()
+            && order(request.resource.data.lastRated).status == 'PICKED_UP'
+            && order(request.resource.data.lastRated).rating == null
+            && request.resource.data.ratingCount == num(resource.data, 'ratingCount') + 1
+            && request.resource.data.ratingSum == num(resource.data, 'ratingSum') + orderAfter(request.resource.data.lastRated).rating)
+      );
     }
+
+    /* ---------- knihy a pas knihy ---------- */
 
     match /copies/{copyId} {
       allow read: if true;
-      match /passport/{entryId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['isbn', 'title', 'author', 'genre', 'language', 'color', 'createdAt', 'createdBy'])
+        && request.resource.data.createdBy == me()
+        && str(request.resource.data.title, 1, 200)
+        && str(request.resource.data.author, 1, 200)
+        && isGenre(request.resource.data.genre)
+        && isLang(request.resource.data.language)
+        && str(request.resource.data.color, 4, 9)
+        && (request.resource.data.isbn == null || str(request.resource.data.isbn, 10, 13))
+        && request.resource.data.createdAt == request.time;
+
+      // Záznam v pase má ID objednávky, takže na jednu objednávku pripadá jeden záznam.
+      match /passport/{orderId} {
         allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'city', 'country', 'note', 'createdAt'])
+          && request.resource.data.uid == me()
+          && order(orderId).recipientUid == me()
+          && order(orderId).copyId == copyId
+          && order(orderId).status == 'SENT'
+          && orderAfter(orderId).status == 'PICKED_UP'
+          && request.resource.data.name == user(me()).name
+          && request.resource.data.city == user(me()).city
+          && request.resource.data.country == user(me()).country
+          && request.resource.data.note == ''
+          && request.resource.data.createdAt == request.time;
+        allow update: if signedIn() && resource.data.uid == me()
+          && changed().hasOnly(['note']) && str(request.resource.data.note, 0, 200);
       }
     }
 
+    /* ---------- ponuky ---------- */
+
     match /listings/{listingId} {
       allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['copyId', 'title', 'author', 'genre', 'language', 'color', 'search', 'condition', 'note', 'photo',
+                                                  'donorUid', 'donorName', 'donorCity', 'donorCountry', 'status', 'orderId', 'prevOrder', 'createdAt'])
+        && request.resource.data.donorUid == me()
+        && request.resource.data.status == 'AVAILABLE'
+        && request.resource.data.orderId == null
+        && isCondition(request.resource.data.condition)
+        && str(request.resource.data.note, 0, 300)
+        && str(request.resource.data.search, 1, 420)
+        && (request.resource.data.photo == null
+            || (request.resource.data.photo is string && request.resource.data.photo.size() < 300000
+                && request.resource.data.photo.matches('^data:image/jpeg;base64,.*')))
+        && request.resource.data.donorName == user(me()).name
+        && request.resource.data.donorCity == user(me()).city
+        && request.resource.data.donorCountry == user(me()).country
+        && request.resource.data.createdAt == request.time
+        && copyMatches(request.resource.data)
+        && (newCopy(request.resource.data) || passedOn(request.resource.data, listingId));
+
+      allow update: if signedIn() && (
+        // niekto si knihu berie: objednávka vzniká v tej istej dávke
+        (resource.data.status == 'AVAILABLE' && request.resource.data.status == 'CLAIMED'
+          && changed().hasOnly(['status', 'orderId'])
+          && resource.data.donorUid != me()
+          && !orderExists(request.resource.data.orderId)
+          && orderAfter(request.resource.data.orderId).recipientUid == me()
+          && orderAfter(request.resource.data.orderId).listingId == listingId)
+        // darca stiahne ponuku
+        || (resource.data.status == 'AVAILABLE' && request.resource.data.status == 'WITHDRAWN'
+          && changed().hasOnly(['status']) && resource.data.donorUid == me())
+        // vyzdvihnutá
+        || (resource.data.status == 'CLAIMED' && request.resource.data.status == 'DELIVERED'
+          && changed().hasOnly(['status'])
+          && order(resource.data.orderId).recipientUid == me()
+          && orderAfter(resource.data.orderId).status == 'PICKED_UP')
+        // zrušená objednávka
+        || (resource.data.status == 'CLAIMED' && request.resource.data.status == 'WITHDRAWN'
+          && changed().hasOnly(['status'])
+          && (order(resource.data.orderId).recipientUid == me() || order(resource.data.orderId).donorUid == me())
+          && orderAfter(resource.data.orderId).status == 'CANCELLED')
+      );
     }
+
+    /* ---------- objednávky ---------- */
 
     // Objednávku vidí len darca a príjemca (obsahuje kontakt na doručenie).
     match /orders/{orderId} {
       allow read: if signedIn() && (resource.data.donorUid == me() || resource.data.recipientUid == me());
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['listingId', 'copyId', 'title', 'author', 'color', 'condition',
+                                                  'donorUid', 'donorName', 'donorCountry',
+                                                  'recipientUid', 'recipientName', 'recipientCity', 'recipientCountry',
+                                                  'shipTo', 'status', 'trackingNumber', 'keep', 'rating', 'createdAt'])
+        && request.resource.data.recipientUid == me()
+        && request.resource.data.status == 'CREATED'
+        && request.resource.data.trackingNumber == null
+        && request.resource.data.keep == null
+        && request.resource.data.rating == null
+        && request.resource.data.createdAt == request.time
+        && listing(request.resource.data.listingId).status == 'AVAILABLE'
+        && listing(request.resource.data.listingId).donorUid != me()
+        && listingAfter(request.resource.data.listingId).orderId == orderId
+        && request.resource.data.donorUid == listing(request.resource.data.listingId).donorUid
+        && request.resource.data.copyId == listing(request.resource.data.listingId).copyId
+        && request.resource.data.title == listing(request.resource.data.listingId).title
+        && request.resource.data.recipientName == user(me()).name
+        && request.resource.data.recipientCity == user(me()).city
+        && request.resource.data.recipientCountry == user(me()).country
+        && userAfter(me()).points == user(me()).points - 1
+        && request.resource.data.shipTo.keys().hasOnly(['fullName', 'phone', 'email', 'pickupPoint'])
+        && str(request.resource.data.shipTo.fullName, 3, 80)
+        && str(request.resource.data.shipTo.phone, 9, 20)
+        && str(request.resource.data.shipTo.email, 0, 120)
+        && str(request.resource.data.shipTo.pickupPoint, 3, 200);
+
+      allow update: if signedIn() && (
+        // darca odoslal
+        (resource.data.donorUid == me() && resource.data.status == 'CREATED' && request.resource.data.status == 'SENT'
+          && changed().hasOnly(['status', 'trackingNumber', 'sentAt'])
+          && str(request.resource.data.trackingNumber, 4, 40)
+          && request.resource.data.sentAt == request.time)
+        // príjemca vyzdvihol: darcovi musí v tej istej dávke pribudnúť bod
+        || (resource.data.recipientUid == me() && resource.data.status == 'SENT' && request.resource.data.status == 'PICKED_UP'
+          && changed().hasOnly(['status', 'pickedUpAt'])
+          && request.resource.data.pickedUpAt == request.time
+          && userAfter(resource.data.donorUid).points == user(resource.data.donorUid).points + 1)
+        // zrušenie: darca kedykoľvek pred odoslaním, príjemca po 5 dňoch; príjemcovi sa vráti bod
+        || (resource.data.status == 'CREATED' && request.resource.data.status == 'CANCELLED'
+          && changed().hasOnly(['status', 'cancelledAt', 'cancelledBy'])
+          && request.resource.data.cancelledAt == request.time
+          && ((resource.data.donorUid == me() && request.resource.data.cancelledBy == 'donor')
+              || (resource.data.recipientUid == me() && request.resource.data.cancelledBy == 'recipient'
+                  && request.time > resource.data.createdAt + duration.value(5, 'd')))
+          && userAfter(resource.data.recipientUid).points == user(resource.data.recipientUid).points + 1)
+        // nechám si / pošlem ďalej
+        || (resource.data.recipientUid == me() && resource.data.status == 'PICKED_UP'
+          && resource.data.keep != 'PASS'
+          && ((request.resource.data.keep == 'KEEP' && changed().hasOnly(['keep']))
+              || (request.resource.data.keep == 'PASS' && changed().hasOnly(['keep', 'passListing'])
+                  && listingAfter(request.resource.data.passListing).prevOrder == orderId)))
+        // hodnotenie: darcovi sa v tej istej dávke pripočíta do priemeru
+        || (resource.data.recipientUid == me() && resource.data.status == 'PICKED_UP' && resource.data.rating == null
+          && changed().hasOnly(['rating'])
+          && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+          && userAfter(resource.data.donorUid).ratingCount == num(user(resource.data.donorUid), 'ratingCount') + 1)
+      );
     }
 
-    match /pointTx/{txId} {
-      allow read: if signedIn() && resource.data.uid == me();
-    }
+    /* ---------- wishlist ---------- */
 
     match /wishlist/{id} {
       allow read, delete: if signedIn() && resource.data.uid == me();
@@ -52,13 +269,6 @@ service cloud.firestore {
         && str(request.resource.data.q, 1, 120)
         && str(request.resource.data.qn, 1, 120)
         && request.resource.data.createdAt == request.time;
-    }
-
-    match /notifications/{id} {
-      allow read, delete: if signedIn() && resource.data.uid == me();
-      allow update: if signedIn() && resource.data.uid == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
-        && request.resource.data.read == true;
     }
   }
 }

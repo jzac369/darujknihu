@@ -43,7 +43,7 @@ export const DICT = {
       cost: "Kniha vás stojí 1 bod. Poštovné zatiaľ hradí darca.",
       noPoints: "Nemáte žiadny bod. Najprv darujte knihu: bod dostanete, keď si ju nový čitateľ vyzdvihne. Po prvých dvoch ponukách dostanete uvítací bod.",
       claim: "Vziať knihu za 1 bod", deadline: (d) => `Darca má ${d} dní na odoslanie, inak dostanete bod späť.`,
-      claimed: "Hotovo. Darca dostal upozornenie a knihu vám pošle.",
+      claimed: "Hotovo. Darca uvidí objednávku v Mojich výmenách a knihu vám pošle.",
     },
     passport: {
       title: "Pas knihy", starts: "Táto kniha začína svoju cestu",
@@ -63,7 +63,7 @@ export const DICT = {
       withdraw: "Stiahnuť z katalógu", photoBig: "Fotka je väčšia ako 3 MB.",
     },
     wishlist: {
-      title: "Wishlist", sub: (h) => `Keď niekto daruje knihu z vášho zoznamu, upozorníme vás a na ${h} hodín ju podržíme len pre vás.`,
+      title: "Wishlist", sub: "Knihy z vášho zoznamu, ktoré niekto ponúka, uvidíte tu aj zvýraznené v katalógu.",
       ph: "Názov alebo autor", add: "Pridať", empty: "Wishlist je prázdny.", none: "Zatiaľ ju nikto neponúka.", available: "Dostupná:",
     },
     ex: {
@@ -151,7 +151,7 @@ export const DICT = {
       cost: "Kniha vás stojí 1 bod. Poštovné zatím hradí dárce.",
       noPoints: "Nemáte žádný bod. Nejprve darujte knihu: bod dostanete, až si ji nový čtenář vyzvedne. Po prvních dvou nabídkách dostanete uvítací bod.",
       claim: "Vzít knihu za 1 bod", deadline: (d) => `Dárce má ${d} dní na odeslání, jinak dostanete bod zpět.`,
-      claimed: "Hotovo. Dárce dostal upozornění a knihu vám pošle.",
+      claimed: "Hotovo. Dárce uvidí objednávku v Mých výměnách a knihu vám pošle.",
     },
     passport: {
       title: "Pas knihy", starts: "Tato kniha začíná svou cestu",
@@ -171,7 +171,7 @@ export const DICT = {
       withdraw: "Stáhnout z katalogu", photoBig: "Fotka je větší než 3 MB.",
     },
     wishlist: {
-      title: "Wishlist", sub: (h) => `Až někdo daruje knihu z vašeho seznamu, upozorníme vás a ${h} hodin ji podržíme jen pro vás.`,
+      title: "Wishlist", sub: "Knihy z vašeho seznamu, které někdo nabízí, uvidíte tady i zvýrazněné v katalogu.",
       ph: "Název nebo autor", add: "Přidat", empty: "Wishlist je prázdný.", none: "Zatím ji nikdo nenabízí.", available: "Dostupná:",
     },
     ex: {

@@ -1,4 +1,6 @@
-// DarujKnihu.sk – statický web (GitHub Pages) napojený na Firebase.
+// DarujKnihu.sk – statický web (GitHub Pages) napojený na Firebase (bezplatný plán Spark).
+// Bez Cloud Functions: každý krok výmeny je dávka zápisov a firestore.rules ju pustia,
+// len keď sedí celá (objednávka, ponuka aj body naraz).
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
@@ -6,39 +8,37 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
-  collection, query, where, limit, onSnapshot, serverTimestamp, writeBatch,
+  collection, query, where, limit, onSnapshot, serverTimestamp, writeBatch, increment,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-import { getStorage, ref as sref, uploadBytes, getDownloadURL, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import { firebaseConfig, useEmulators } from "./firebase-config.js";
 import { DICT } from "./i18n.js";
-import { GENRES, CONDITIONS, LANGUAGES, RESERVATION_HOURS, SEND_DEADLINE_DAYS } from "./constants.js";
+import { GENRES, CONDITIONS, LANGUAGES, SEND_DEADLINE_DAYS } from "./constants.js";
+
+const COVER_COLORS = ["#2F4858", "#7A3B2E", "#3D5A3C", "#5B4B8A", "#8A6A1F", "#1F5C6B", "#6B2F4A", "#44403C", "#3B4F7A", "#6A4E2E"];
 
 /* ---------- Firebase ---------- */
 
 const configured = useEmulators || !String(firebaseConfig.apiKey).startsWith("DOPLNIT");
 // Emulátory bežia pod offline projektom demo-darujknihu (firebase emulators:start --project demo-darujknihu).
 const app = initializeApp(useEmulators
-  ? { ...firebaseConfig, apiKey: "demo-key", projectId: "demo-darujknihu", storageBucket: "demo-darujknihu.appspot.com" }
+  ? { ...firebaseConfig, apiKey: "demo-key", projectId: "demo-darujknihu" }
   : firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const fns = getFunctions(app, "europe-west1");
-const storage = getStorage(app);
 if (useEmulators) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectFunctionsEmulator(fns, "127.0.0.1", 5001);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
 }
-const call = (name, data) => httpsCallable(fns, name)(data).then((r) => r.data);
+const ref = (...path) => doc(db, ...path);
+const newId = (col) => doc(collection(db, col)).id;
 
 /* ---------- stav a pomocné ---------- */
 
-const S = { user: null, profile: null, unread: 0, ready: false, flash: null };
+const S = { user: null, profile: null, todo: 0, ready: false };
 let routeSubs = [];
 let userSubs = [];
 const catalogFilter = { q: "", genre: "", lang: "" };
+const orderCache = new Map();
 
 const $ = (s, root = document) => root.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -67,7 +67,8 @@ function toast(text, err = false) {
   $("#toasts").appendChild(t);
   setTimeout(() => t.remove(), 5000);
 }
-const errText = (e) => T().auth.errors[e?.code] || (e?.code?.startsWith?.("functions/") ? e.message : T().common.error);
+const errText = (e) => T().auth.errors[e?.code] || (e?.shown ? e.message : T().common.error);
+const fail = (msg) => { throw Object.assign(new Error(msg), { shown: true }); };
 const go = (hash) => { if (location.hash === hash) route(); else location.hash = hash; };
 
 function cover(l, size = "") {
@@ -87,7 +88,8 @@ function renderHeader() {
   const tabs = [["/", t.nav.catalog], ["/darovat", t.nav.donate], ["/wishlist", t.nav.wishlist], ["/vymeny", t.nav.exchanges]];
   $("#nav").innerHTML = tabs.map(([h, label]) => {
     const active = h === "/" ? path === "/" || path.startsWith("/kniha") : path.startsWith(h);
-    return `<a class="tab" href="#${h}" ${active ? 'aria-current="page"' : ""}>${label}</a>`;
+    const dot = h === "/vymeny" && S.todo ? `<span class="dot">${S.todo}</span>` : "";
+    return `<a class="tab" href="#${h}" ${active ? 'aria-current="page"' : ""}>${label}${dot}</a>`;
   }).join("");
   const l = lang();
   const langs = `<span class="langs" role="group" aria-label="Jazyk"><button data-lang="sk" aria-pressed="${l === "sk"}">SK</button><button data-lang="cs" aria-pressed="${l === "cs"}">CZ</button></span>`;
@@ -95,9 +97,6 @@ function renderHeader() {
     const p = S.profile.points || 0;
     $("#wallet").innerHTML = `${langs}
       <a class="pill points" href="#/vymeny"><b>${p}</b> ${t.pts(p).replace(/^\d+ /, "")}</a>
-      <a class="pill" href="#/upozornenia" aria-label="${esc(t.header.notifications)}">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-        <b>${S.unread}</b></a>
       <a class="btn small ghost" href="#/profil">${t.header.profile}</a>
       <button class="btn small ghost" data-action="logout">${t.header.logout}</button>`;
   } else if (S.user) {
@@ -120,12 +119,12 @@ function route() {
   if (!S.ready) return;
   const path = location.hash.replace(/^#/, "") || "/";
   const [, seg, id] = path.split("/");
-  const needAuth = ["darovat", "wishlist", "vymeny", "upozornenia", "profil"];
+  const needAuth = ["darovat", "wishlist", "vymeny", "profil"];
   if (needAuth.includes(seg) && !S.user) return go("#/prihlasenie");
   if (S.user && !S.profile && seg !== "profil") return go("#/profil");
   const view = {
     "": viewCatalog, kniha: () => viewBook(id), darovat: viewDonate, wishlist: viewWishlist, vymeny: viewExchanges,
-    upozornenia: viewNotifications, prihlasenie: viewLogin, registracia: viewRegister, heslo: viewReset, profil: viewProfile,
+    prihlasenie: viewLogin, registracia: viewRegister, heslo: viewReset, profil: viewProfile,
   }[seg || ""] || viewCatalog;
   view();
   window.scrollTo(0, 0);
@@ -139,7 +138,7 @@ onAuthStateChanged(auth, (user) => {
   userSubs = [];
   S.user = user;
   S.profile = null;
-  S.unread = 0;
+  S.todo = 0;
   if (!user) {
     S.ready = true;
     return route();
@@ -154,10 +153,17 @@ onAuthStateChanged(auth, (user) => {
     renderHeader();
     if (first || hadProfile !== !!S.profile) { first = false; S.ready = true; route(); }
   }));
-  userSubs.push(onSnapshot(query(collection(db, "notifications"), where("uid", "==", user.uid), where("read", "==", false)), (s) => {
-    S.unread = s.size;
-    renderHeader();
-  }));
+  // Počet vecí, ktoré čakajú na používateľa: odoslať knihu, potvrdiť vyzdvihnutie, rozhodnúť o knihe.
+  const todo = { out: 0, in: 0 };
+  const setTodo = () => { S.todo = todo.out + todo.in; renderHeader(); };
+  userSubs.push(onSnapshot(query(collection(db, "orders"), where("donorUid", "==", user.uid)), (s) => {
+    todo.out = s.docs.filter((d) => d.data().status === "CREATED").length;
+    setTodo();
+  }, () => {}));
+  userSubs.push(onSnapshot(query(collection(db, "orders"), where("recipientUid", "==", user.uid)), (s) => {
+    todo.in = s.docs.filter((d) => { const o = d.data(); return o.status === "SENT" || (o.status === "PICKED_UP" && !o.keep); }).length;
+    setTodo();
+  }, () => {}));
 });
 
 /* ---------- katalóg ---------- */
@@ -279,7 +285,7 @@ function viewBook(id) {
               ${reservedMe ? `<span class="tag hot">${tb.reservedMe(resLeft)}</span>` : ""}
             </div>
             ${l.note ? `<p style="margin:0">„${esc(l.note)}“</p>` : ""}
-            ${l.photoUrl ? `<a href="${esc(l.photoUrl)}" target="_blank" rel="noopener"><img class="photo-prev" src="${esc(l.photoUrl)}" alt=""></a>` : ""}
+            ${l.photo ? `<a href="${esc(l.photo)}" target="_blank" rel="noopener"><img class="photo-prev" src="${esc(l.photo)}" alt=""></a>` : ""}
             <p class="donor" style="margin:0">${esc(tb.donor(l.donorName, l.donorCity, tt.countries[l.donorCountry] || l.donorCountry))}${esc(stats)}</p>
             ${claim}
           </div>
@@ -361,7 +367,7 @@ async function lookupIsbn(raw) {
 function viewWishlist() {
   const t = T().wishlist;
   $("#view").innerHTML = `
-    <div class="section-head"><div><h1>${t.title}</h1><p class="sub">${t.sub(RESERVATION_HOURS)}</p></div></div>
+    <div class="section-head"><div><h1>${t.title}</h1><p class="sub">${t.sub}</p></div></div>
     <div class="panel stack" style="max-width:680px">
       <form class="isbn-row" data-form="wish"><input class="field" name="q" required maxlength="120" placeholder="${esc(t.ph)}" aria-label="${esc(t.ph)}" style="font-family:var(--f-body)"><button class="btn primary">${t.add}</button></form>
       <div id="wishes"><p class="hint">${T().common.loading}</p></div>
@@ -444,27 +450,11 @@ function viewExchanges() {
   };
   const sub = (field, el, render, empty) => routeSubs.push(onSnapshot(query(collection(db, "orders"), where(field, "==", S.user.uid)), (s) => {
     const list = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
+    list.forEach((o) => orderCache.set(o.id, o));
     $(el).innerHTML = list.length ? `<div class="list">${list.map(render).join("")}</div>` : `<div class="empty">${empty}</div>`;
   }, () => toast(T().common.error, true)));
   sub("recipientUid", "#incoming", incoming, t.noIncoming);
   sub("donorUid", "#outgoing", outgoing, t.noOutgoing);
-}
-
-/* ---------- upozornenia ---------- */
-
-function viewNotifications() {
-  const t = T().notif;
-  $("#view").innerHTML = `<div class="stack" style="max-width:680px">
-    <div class="section-head"><h1>${t.title}</h1><button class="btn small" data-action="readall">${t.markAll}</button></div>
-    <div class="panel" style="padding:0;overflow:hidden" id="notifs"><p class="hint" style="padding:16px">${T().common.loading}</p></div></div>`;
-  routeSubs.push(onSnapshot(query(collection(db, "notifications"), where("uid", "==", S.user.uid), limit(100)), (s) => {
-    const list = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b.createdAt) - ms(a.createdAt));
-    $("#notifs").innerHTML = list.length ? list.map((n) => {
-      const text = (T().notif[n.type] || (() => n.type))(n.params || {});
-      const when = n.createdAt ? n.createdAt.toDate().toLocaleString(T().locale, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-      return `<div class="notif ${n.read ? "" : "unread"}">${n.href ? `<a href="${esc(n.href)}" style="color:inherit">${esc(text)}</a>` : esc(text)}<time>${when}</time></div>`;
-    }).join("") : `<p class="empty" style="margin:16px">${t.empty}</p>`;
-  }));
 }
 
 /* ---------- účet ---------- */
@@ -542,7 +532,7 @@ const forms = {
   async register(f, fd) {
     const p = profileData(fd);
     const cred = await createUserWithEmailAndPassword(auth, String(fd.get("email")).trim(), String(fd.get("password")));
-    await setDoc(doc(db, "users", cred.user.uid), { ...p, createdAt: serverTimestamp() });
+    await setDoc(ref("users", cred.user.uid), newProfile(p));
     go("#/darovat");
   },
   async reset(f, fd) {
@@ -553,33 +543,56 @@ const forms = {
     const p = profileData(fd);
     const r = doc(db, "users", S.user.uid);
     if (S.profile) await updateDoc(r, p);
-    else await setDoc(r, { ...p, createdAt: serverTimestamp() });
+    else await setDoc(r, newProfile(p));
     toast(T().auth.profileSaved);
     go("#/");
   },
+  // Objednávka: v jednej dávke vznikne objednávka, ponuka sa zmení na CLAIMED a príjemcovi ubudne bod.
   async claim(f, fd) {
-    const data = { fullName: fd.get("fullName"), phone: fd.get("phone"), pickupPoint: fd.get("pickupPoint") };
-    store.set("dk-ship", JSON.stringify(data));
-    const id = location.hash.split("/")[2];
-    await call("claimListing", { listingId: id, ...data });
+    const shipTo = {
+      fullName: String(fd.get("fullName")).trim(), phone: String(fd.get("phone")).trim(),
+      pickupPoint: String(fd.get("pickupPoint")).trim(), email: S.user.email || "",
+    };
+    store.set("dk-ship", JSON.stringify(shipTo));
+    const listingId = location.hash.split("/")[2];
+    const ls = await getDoc(ref("listings", listingId));
+    const l = ls.data();
+    if (!l || l.status !== "AVAILABLE") fail(T().book.gone);
+    if ((S.profile.points || 0) < 1) fail(T().book.noPoints);
+    const orderId = newId("orders");
+    const b = writeBatch(db);
+    b.set(ref("orders", orderId), {
+      listingId, copyId: l.copyId, title: l.title, author: l.author, color: l.color, condition: l.condition,
+      donorUid: l.donorUid, donorName: l.donorName, donorCountry: l.donorCountry,
+      recipientUid: S.user.uid, recipientName: S.profile.name, recipientCity: S.profile.city, recipientCountry: S.profile.country,
+      shipTo, status: "CREATED", trackingNumber: null, keep: null, rating: null, createdAt: serverTimestamp(),
+    });
+    b.update(ref("listings", listingId), { status: "CLAIMED", orderId });
+    b.update(ref("users", S.user.uid), { points: increment(-1), lastOrder: orderId });
+    await b.commit();
     toast(T().book.claimed);
     go("#/vymeny");
   },
   async donate(f, fd) {
     const t = T().donate;
     const file = fd.get("photo");
-    let photoUrl = null;
-    if (file && file.size) {
-      if (file.size > 3 * 1024 * 1024) throw Object.assign(new Error(t.photoBig), { shown: true });
-      const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type] || "jpg";
-      const r = sref(storage, `listings/${S.user.uid}/${crypto.randomUUID()}.${ext}`);
-      await uploadBytes(r, file, { contentType: file.type });
-      photoUrl = await getDownloadURL(r);
-    }
-    await call("createListing", {
-      isbn: fd.get("isbn") || null, title: fd.get("title"), author: fd.get("author"), genre: fd.get("genre"),
-      language: fd.get("language"), condition: fd.get("condition"), note: fd.get("note") || "", photoUrl,
-    });
+    const photo = file && file.size ? await shrinkPhoto(file) : null;
+    const copyId = newId("copies");
+    const listingId = newId("listings");
+    const title = String(fd.get("title")).trim();
+    const author = String(fd.get("author")).trim();
+    const isbn = String(fd.get("isbn") || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+    const copy = {
+      isbn: isbn.length === 10 || isbn.length === 13 ? isbn : null, title, author,
+      genre: fd.get("genre"), language: fd.get("language"),
+      color: COVER_COLORS[Math.floor(Math.random() * COVER_COLORS.length)],
+      createdAt: serverTimestamp(), createdBy: S.user.uid,
+    };
+    const b = writeBatch(db);
+    b.set(ref("copies", copyId), copy);
+    b.set(ref("listings", listingId), listingData(copyId, copy, String(fd.get("condition")), String(fd.get("note") || "").trim(), photo, null));
+    await b.commit();
+    await maybeWelcomePoint();
     f.reset();
     $("#isbn-msg").textContent = t.ok;
     toast(t.ok);
@@ -591,14 +604,51 @@ const forms = {
     f.reset();
   },
   async sent(f, fd) {
-    await call("markSent", { orderId: f.dataset.id, trackingNumber: fd.get("tracking") });
+    const tracking = String(fd.get("tracking")).replace(/\s+/g, "");
+    await updateDoc(ref("orders", f.dataset.id), { status: "SENT", trackingNumber: tracking, sentAt: serverTimestamp() });
   },
   async note(f, fd) {
-    await call("addPassportNote", { orderId: f.dataset.id, note: fd.get("note") });
+    const o = orderCache.get(f.dataset.id);
+    await updateDoc(ref("copies", o.copyId, "passport", o.id), { note: String(fd.get("note")).trim() });
     f.reset();
     toast("✓");
   },
 };
+
+const newProfile = (p) => ({ ...p, points: 0, welcomeGiven: false, createdAt: serverTimestamp() });
+
+function listingData(copyId, copy, condition, note, photo, prevOrder) {
+  return {
+    copyId, title: copy.title, author: copy.author, genre: copy.genre, language: copy.language, color: copy.color,
+    search: norm(`${copy.title} ${copy.author}`).slice(0, 420), condition, note, photo,
+    donorUid: S.user.uid, donorName: S.profile.name, donorCity: S.profile.city, donorCountry: S.profile.country,
+    status: "AVAILABLE", orderId: null, prevOrder, createdAt: serverTimestamp(),
+  };
+}
+
+// Uvítací bod: raz za účet, keď má používateľ dve vlastné ponuky (pravidlá ich overia).
+async function maybeWelcomePoint() {
+  if (S.profile.welcomeGiven) return;
+  const s = await getDocs(query(collection(db, "listings"), where("donorUid", "==", S.user.uid), limit(2)));
+  if (s.size < 2) return;
+  await updateDoc(ref("users", S.user.uid), { points: increment(1), welcomeGiven: true, welcomeListings: s.docs.map((d) => d.id) });
+  toast(T().notif.welcomePoint());
+}
+
+// Fotka sa zmenší v prehliadači a uloží priamo do ponuky (bez platiaceho úložiska).
+async function shrinkPhoto(file) {
+  const img = await createImageBitmap(file);
+  const scale = Math.min(1, 720 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * scale);
+  c.height = Math.round(img.height * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  for (const q of [0.75, 0.6, 0.45]) {
+    const url = c.toDataURL("image/jpeg", q);
+    if (url.length < 280000) return url;
+  }
+  fail(T().donate.photoBig);
+}
 
 document.addEventListener("submit", async (e) => {
   const f = e.target.closest("form[data-form]");
@@ -636,19 +686,50 @@ const actions = {
     $("#author").value = hit.author;
     msg.textContent = `${t.loaded} ${hit.title}`;
   },
-  async withdraw(el) { await call("withdrawListing", { listingId: el.dataset.id }); },
-  async unwish(el) { await deleteDoc(doc(db, "wishlist", el.dataset.id)); },
-  async pickup(el) { await call("confirmPickup", { orderId: el.dataset.id }); },
-  async cancel(el) { await call("cancelOrder", { orderId: el.dataset.id }); },
-  async keep(el) {
-    await call("setKeep", { orderId: el.dataset.id, choice: el.dataset.value });
-    if (el.dataset.value === "PASS") toast(T().ex.passed);
-  },
-  async rate(el) { await call("rateOrder", { orderId: el.dataset.id, rating: Number(el.dataset.value) }); },
-  async readall() {
-    const s = await getDocs(query(collection(db, "notifications"), where("uid", "==", S.user.uid), where("read", "==", false)));
+  async withdraw(el) { await updateDoc(ref("listings", el.dataset.id), { status: "WITHDRAWN" }); },
+  async unwish(el) { await deleteDoc(ref("wishlist", el.dataset.id)); },
+  // Vyzdvihnutie: objednávka, ponuka, bod pre darcu a záznam v pase knihy naraz.
+  async pickup(el) {
+    const o = orderCache.get(el.dataset.id);
     const b = writeBatch(db);
-    s.docs.forEach((d) => b.update(d.ref, { read: true }));
+    b.update(ref("orders", o.id), { status: "PICKED_UP", pickedUpAt: serverTimestamp() });
+    b.update(ref("listings", o.listingId), { status: "DELIVERED" });
+    b.update(ref("users", o.donorUid), { points: increment(1), sentCount: increment(1), lastDelivered: o.id });
+    b.set(ref("copies", o.copyId, "passport", o.id), {
+      uid: S.user.uid, name: S.profile.name, city: S.profile.city, country: S.profile.country, note: "", createdAt: serverTimestamp(),
+    });
+    await b.commit();
+  },
+  async cancel(el) {
+    const o = orderCache.get(el.dataset.id);
+    const by = o.donorUid === S.user.uid ? "donor" : "recipient";
+    const b = writeBatch(db);
+    b.update(ref("orders", o.id), { status: "CANCELLED", cancelledAt: serverTimestamp(), cancelledBy: by });
+    b.update(ref("listings", o.listingId), { status: "WITHDRAWN" });
+    b.update(ref("users", o.recipientUid), { points: increment(1), lastRefund: o.id });
+    await b.commit();
+  },
+  async keep(el) {
+    const o = orderCache.get(el.dataset.id);
+    if (el.dataset.value === "KEEP") {
+      await updateDoc(ref("orders", o.id), { keep: "KEEP" });
+      return;
+    }
+    // Pošlem ďalej: nová ponuka toho istého exempláru (pas knihy pokračuje).
+    const copy = (await getDoc(ref("copies", o.copyId))).data();
+    const listingId = newId("listings");
+    const b = writeBatch(db);
+    b.set(ref("listings", listingId), listingData(o.copyId, copy, o.condition, "", null, o.id));
+    b.update(ref("orders", o.id), { keep: "PASS", passListing: listingId });
+    await b.commit();
+    toast(T().ex.passed);
+  },
+  async rate(el) {
+    const o = orderCache.get(el.dataset.id);
+    const rating = Number(el.dataset.value);
+    const b = writeBatch(db);
+    b.update(ref("orders", o.id), { rating });
+    b.update(ref("users", o.donorUid), { ratingSum: increment(rating), ratingCount: increment(1), lastRated: o.id });
     await b.commit();
   },
 };
