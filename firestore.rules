@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// Body, ponuky, objednávky a pas knihy mení iba server (Cloud Functions).
+// Prehliadač smie zapisovať len vlastný profil, wishlist a označiť upozornenia ako prečítané.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function validProfile(d) {
+      return str(d.name, 2, 60) && str(d.city, 2, 60) && d.country in ['SK', 'CZ'];
+    }
+
+    // Verejný profil: meno, mesto, krajina, body a hodnotenie darcu.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name', 'city', 'country', 'createdAt'])
+        && validProfile(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'city', 'country'])
+        && validProfile(request.resource.data);
+    }
+
+    match /copies/{copyId} {
+      allow read: if true;
+      match /passport/{entryId} {
+        allow read: if true;
+      }
+    }
+
+    match /listings/{listingId} {
+      allow read: if true;
+    }
+
+    // Objednávku vidí len darca a príjemca (obsahuje kontakt na doručenie).
+    match /orders/{orderId} {
+      allow read: if signedIn() && (resource.data.donorUid == me() || resource.data.recipientUid == me());
+    }
+
+    match /pointTx/{txId} {
+      allow read: if signedIn() && resource.data.uid == me();
+    }
+
+    match /wishlist/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == me();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'q', 'qn', 'createdAt'])
+        && request.resource.data.uid == me()
+        && str(request.resource.data.q, 1, 120)
+        && str(request.resource.data.qn, 1, 120)
+        && request.resource.data.createdAt == request.time;
+    }
+
+    match /notifications/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == me();
+      allow update: if signedIn() && resource.data.uid == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read == true;
+    }
+  }
+}
