@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Prototyp portálu DarujKnihu.sk – výmena kníh zadarmo za body.">
+<title>DarujKnihu.sk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: knižničný katalóg — horná lišta s bodmi, karty kníh ako obálky, pas knihy ako výpožičný lístok s pečiatkami */
+:root {
+  --bg: #F3F5F2;
+  --surface: #FFFFFF;
+  --ink: #1C2320;
+  --muted: #5B6661;
+  --line: #D9DFDA;
+  --accent: #1F5C4A;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E1EDE7;
+  --stamp: #B3372B;
+  --stamp-soft: #F6E3E0;
+  --warn: #8A5A00;
+  --warn-soft: #FBEFD5;
+  --shadow: 0 1px 2px rgba(20,30,25,.06), 0 4px 16px rgba(20,30,25,.06);
+  --f-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --surface: #1A1F1D; --ink: #E7ECE9; --muted: #9AA59F; --line: #2D3531;
+    --accent: #72C4A7; --accent-ink: #0D1914; --accent-soft: #1E2E27;
+    --stamp: #E87766; --stamp-soft: #3A2421; --warn: #E6B556; --warn-soft: #342A16;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #1A1F1D; --ink: #E7ECE9; --muted: #9AA59F; --line: #2D3531;
+  --accent: #72C4A7; --accent-ink: #0D1914; --accent-soft: #1E2E27;
+  --stamp: #E87766; --stamp-soft: #3A2421; --warn: #E6B556; --warn-soft: #342A16;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; text-wrap: balance; margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; }
+
+/* Top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar-in { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 12px; }
+.logo { font-family: var(--f-display); font-size: 22px; color: var(--ink); text-decoration: none; white-space: nowrap; }
+.logo span { color: var(--accent); }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1 1 auto; }
+.tab { border: 0; background: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; position: relative; }
+.tab:hover { color: var(--ink); background: var(--bg); }
+.tab[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+.tab .dot { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--stamp); color: #fff; font-size: 11px; line-height: 16px; text-align: center; padding: 0 4px; font-weight: 600; }
+.wallet { display: flex; gap: 8px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); cursor: pointer; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pill b { font-weight: 700; }
+.pill.points { border-color: var(--stamp); color: var(--stamp); }
+.pill.points.stamped { animation: stamp .7s ease; }
+@keyframes stamp { 0% { transform: scale(1); } 30% { transform: scale(1.25) rotate(-6deg); background: var(--stamp-soft); } 100% { transform: scale(1); } }
+
+/* Demo banner */
+.demo { background: var(--warn-soft); color: var(--warn); font-size: 13px; }
+.demo .wrap { padding-block: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.linkbtn { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font-size: inherit; }
+
+main { padding-block: 24px 64px; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.section-head h2 { font-size: 26px; }
+.sub { color: var(--muted); margin: 4px 0 0; max-width: 62ch; }
+
+/* Intro */
+.intro { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: center; margin-bottom: 28px; }
+.intro h1 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.1; }
+.intro h1 em { font-style: normal; color: var(--accent); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.steps li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.steps .n { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-family: var(--f-mono); font-size: 13px; }
+.steps b { display: block; }
+.steps span { color: var(--muted); font-size: 14px; }
+
+/* Filters */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.field { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 9px 12px; min-width: 0; }
+.filters .field[type="search"] { flex: 1 1 260px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* Grid of books */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; text-align: left; transition: transform .15s ease, box-shadow .15s ease; }
+.card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.card.match { border-color: var(--stamp); }
+.cover { aspect-ratio: 2 / 3; max-width: 100%; border-radius: 4px 8px 8px 4px; padding: 14px 12px 12px 18px; color: #F5F2EA; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; box-shadow: inset 6px 0 0 rgba(0,0,0,.18), inset 7px 0 0 rgba(255,255,255,.12); }
+.cover .t { font-family: var(--f-display); font-size: 17px; line-height: 1.15; overflow-wrap: anywhere; }
+.cover .a { font-size: 12px; opacity: .85; letter-spacing: .02em; }
+.cover .rule { height: 1px; background: rgba(245,242,234,.45); margin: 8px 0; }
+.cover.big { width: 180px; flex: none; }
+.cover.big .t { font-size: 22px; }
+.meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.meta .title { font-weight: 600; line-height: 1.3; }
+.meta .author { color: var(--muted); font-size: 14px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag { font-size: 12px; border-radius: 6px; padding: 2px 8px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.tag.good { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.tag.hot { background: var(--stamp-soft); color: var(--stamp); border-color: transparent; font-weight: 600; }
+.donor { font-size: 13px; color: var(--muted); }
+.empty { padding: 32px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; background: var(--surface); }
+
+/* Buttons */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: none; }
+.btn.small { padding: 6px 12px; font-size: 14px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Panels */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.two > * { min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+label.l { font-size: 13px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 6px; letter-spacing: .02em; }
+.field.w { width: 100%; }
+textarea.field { resize: vertical; min-height: 72px; }
+.radios { display: flex; gap: 6px; flex-wrap: wrap; }
+.radios input { position: absolute; opacity: 0; pointer-events: none; }
+.radios label { border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-size: 14px; }
+.radios input:checked + label { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.radios input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.isbn-row { display: flex; gap: 8px; }
+.isbn-row .field { flex: 1; font-family: var(--f-mono); min-width: 0; }
+.hint { font-size: 13px; color: var(--muted); }
+.mono { font-family: var(--f-mono); }
+.photo-prev { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+
+/* Orders */
+.order { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; grid-template-columns: 64px 1fr; gap: 14px; background: var(--surface); }
+.order .cover { padding: 6px 6px 6px 9px; }
+.order .cover .t { font-size: 10px; }
+.order .cover .a, .order .cover .rule { display: none; }
+.order h3 { font-family: var(--f-body); font-weight: 600; font-size: 16px; }
+.track { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.track li { font-size: 11.5px; color: var(--muted); border-top: 3px solid var(--line); padding-top: 6px; line-height: 1.25; }
+.track li.done { border-color: var(--accent); color: var(--ink); }
+.track li.now { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.code { font-family: var(--f-mono); font-size: 20px; letter-spacing: .08em; background: var(--bg); border: 1px dashed var(--muted); border-radius: 8px; padding: 8px 12px; display: inline-block; }
+.list { display: flex; flex-direction: column; gap: 12px; }
+
+/* Passport */
+.passport { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.passport header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+.passport header b { color: var(--ink); font-family: var(--f-display); font-weight: 400; font-size: 16px; }
+.pp-row { display: grid; grid-template-columns: 112px 1fr; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); background-image: linear-gradient(var(--line), var(--line)); background-size: 1px 100%; background-position: 124px 0; background-repeat: no-repeat; }
+.pp-row:last-child { border-bottom: 0; }
+.pp-stamp { font-family: var(--f-mono); font-size: 12px; color: var(--stamp); border: 1.5px solid var(--stamp); border-radius: 4px; padding: 2px 6px; transform: rotate(-4deg); justify-self: start; align-self: start; white-space: nowrap; }
+.pp-row p { margin: 0; font-size: 14px; }
+.pp-row small { color: var(--muted); }
+
+/* Modal */
+.scrim { position: fixed; inset: 0; background: rgba(10,15,12,.5); z-index: 50; display: grid; place-items: center; padding: 16px; }
+.modal { background: var(--surface); border-radius: 14px; max-width: 760px; width: 100%; max-height: calc(100% - 32px); overflow: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.3); position: relative; }
+.modal .x { position: absolute; top: 12px; right: 12px; border: 0; background: var(--bg); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+.detail { display: flex; gap: 24px; flex-wrap: wrap; }
+.detail > .info { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.detail h2 { font-size: 28px; padding-right: 40px; }
+.claim { background: var(--bg); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sum { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; font-size: 14px; }
+.sum .total { font-weight: 700; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; }
+.note { font-size: 13px; color: var(--muted); }
+.warnbox { background: var(--warn-soft); color: var(--warn); padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+
+/* Notifications */
+.notif-panel { position: absolute; right: 16px; top: calc(100% + 6px); width: min(360px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px; z-index: 30; }
+.notif-panel .n-item { padding: 10px; border-radius: 8px; font-size: 14px; }
+.notif-panel .n-item + .n-item { border-top: 1px solid var(--line); }
+.notif-panel time { display: block; font-size: 12px; color: var(--muted); }
+.bar-in { position: relative; }
+
+/* Toast */
+.toasts { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 60; width: min(440px, calc(100% - 32px)); }
+.toast { background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 10px; box-shadow: var(--shadow); font-size: 14px; animation: up .25s ease; }
+@keyframes up { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (max-width: 760px) {
+  .intro, .two { grid-template-columns: 1fr; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .cover .t { font-size: 15px; }
+  .cover.big { width: 140px; }
+  .track li { font-size: 10.5px; }
+  .pp-row { grid-template-columns: 1fr; background-image: none; }
+  .modal { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap bar-in">
+    <a class="logo" href="#katalog" data-tab="katalog">Daruj<span>Knihu</span>.sk</a>
+    <nav class="tabs" aria-label="Hlavná navigácia">
+      <button class="tab" data-tab="katalog">Katalóg</button>
+      <button class="tab" data-tab="pridat">Darovať knihu</button>
+      <button class="tab" data-tab="wishlist">Wishlist <span class="dot" id="wl-dot" hidden></span></button>
+      <button class="tab" data-tab="vymeny">Moje výmeny <span class="dot" id="ex-dot" hidden></span></button>
+    </nav>
+    <div class="wallet">
+      <button class="pill points" id="points-pill" data-action="explain-points" title="Vaše body"></button>
+      <button class="pill" id="credit-pill" data-action="topup" title="Kredit na poštovné"></button>
+      <button class="pill" id="bell" data-action="bell" aria-label="Upozornenia"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg> <b id="bell-n">0</b></button>
+    </div>
+    <div class="notif-panel" id="notif-panel" hidden></div>
+  </div>
+</header>
+<div class="demo">
+  <div class="wrap">
+    <span>Prototyp s ukážkovými dátami. Packeta, platby a ostatní používatelia sú simulovaní.</span>
+    <button class="linkbtn" data-action="reset">Začať ukážku odznova</button>
+  </div>
+</div>
+
+<main class="wrap" id="view"></main>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  const SHIPPING = 2.99;
+  const NO_POINT_FEE = 1.00;
+  const STORE_KEY = 'darujknihu-demo-v1';
+  const COVERS = ['#2F4858', '#7A3B2E', '#3D5A3C', '#5B4B8A', '#8A6A1F', '#1F5C6B', '#6B2F4A', '#44403C', '#3B4F7A', '#6A4E2E'];
+  const GENRES = ['Román', 'Klasika', 'Krimi', 'Fantasy', 'Sci-fi', 'Náučná', 'Osobný rozvoj', 'Pre deti', 'Humor'];
+  const CONDITIONS = ['Ako nová', 'Veľmi dobrý stav', 'Dobrý stav', 'Opotrebovaná'];
+  const STEPS = ['Objednané', 'Darca odoslal', 'Na ceste', 'V Z-BOXe', 'Vyzdvihnuté'];
+  const ZBOXES = [
+    'Z-BOX Bratislava – Obchodná',
+    'Z-BOX Bratislava – Petržalka, Romanova',
+    'Z-BOX Košice – Hlavná',
+    'Z-BOX Žilina – Mariánske námestie',
+    'Z-BOX Nitra – Štefánikova',
+    'Z-BOX Banská Bystrica – Námestie SNP'
+  ];
+  const DONORS = {
+    katka: { name: 'Katka', city: 'Bratislava', rating: 4.9, swaps: 23 },
+    marek: { name: 'Marek', city: 'Košice', rating: 4.7, swaps: 11 },
+    zuzana: { name: 'Zuzana', city: 'Žilina', rating: 5.0, swaps: 38 },
+    peter: { name: 'Peter', city: 'Nitra', rating: 4.6, swaps: 7 },
+    jana: { name: 'Jana', city: 'Brno', rating: 4.8, swaps: 15 },
+    tomas: { name: 'Tomáš', city: 'Banská Bystrica', rating: 4.9, swaps: 19 },
+    lucia: { name: 'Lucia', city: 'Trnava', rating: 4.8, swaps: 9 }
+  };
+  const READERS = ['Marek', 'Zuzana', 'Peter', 'Lucia', 'Tomáš', 'Jana', 'Katka'];
+  const ISBN_DEMO = {
+    '9788055100011': { title: 'Stopárov sprievodca po Galaxii', author: 'Douglas Adams', genre: 'Sci-fi' },
+    '9788055100028': { title: 'Na západe nič nové', author: 'Erich Maria Remarque', genre: 'Klasika' },
+    '9788055100035': { title: 'Kniha džunglí', author: 'Rudyard Kipling', genre: 'Pre deti' }
+  };
+  const POOL = [
+    { title: 'Kafka na pobreží', author: 'Haruki Murakami', genre: 'Román', condition: 'Veľmi dobrý stav', donor: 'jana', note: 'Čítaná raz, bez poznámok.' },
+    { title: 'Meno ruže', author: 'Umberto Eco', genre: 'Klasika', condition: 'Dobrý stav', donor: 'tomas', note: 'Trochu zažltnuté strany.' },
+    { title: 'Marťan', author: 'Andy Weir', genre: 'Sci-fi', condition: 'Ako nová', donor: 'lucia', note: '' }
+  ];
+
+  const book = (id, title, author, genre, condition, donor, note, passport) =>
+    ({ id, title, author, genre, condition, donor, note, passport: passport || [], status: 'available', mine: false, color: COVERS[id % COVERS.length], added: Date.now() - id * 3600e3 });
+
+  function seed() {
+    return {
+      points: 1,
+      credit: 10,
+      nextId: 100,
+      poolIdx: 0,
+      listings: [
+        book(1, 'Malý princ', 'Antoine de Saint-Exupéry', 'Pre deti', 'Veľmi dobrý stav', 'katka', 'Darček, ktorý už u nás dostal svoje.', [
+          { who: 'Lucia', city: 'Trnava', date: '2025-03-12', note: 'Čítali sme s dcérou pred spaním.' },
+          { who: 'Katka', city: 'Bratislava', date: '2026-02-04', note: 'Posielam ďalej, nech putuje.' }]),
+        book(2, '1984', 'George Orwell', 'Klasika', 'Dobrý stav', 'marek', 'Podčiarknuté pár viet ceruzkou.', [
+          { who: 'Tomáš', city: 'Banská Bystrica', date: '2024-11-20', note: 'Strašidelne aktuálne.' },
+          { who: 'Marek', city: 'Košice', date: '2025-09-01', note: '' }]),
+        book(3, 'Sapiens', 'Yuval Noah Harari', 'Náučná', 'Ako nová', 'zuzana', ''),
+        book(4, 'Harry Potter a Kameň mudrcov', 'J. K. Rowlingová', 'Fantasy', 'Opotrebovaná', 'peter', 'Prečítaná trikrát, chrbát je ohnutý.', [
+          { who: 'Jana', city: 'Brno', date: '2023-06-15', note: 'Prvá kniha, ktorú syn prečítal sám.' },
+          { who: 'Lucia', city: 'Trnava', date: '2024-08-02', note: '' },
+          { who: 'Peter', city: 'Nitra', date: '2025-12-10', note: 'Stále funguje.' }]),
+        book(5, 'Hobit', 'J. R. R. Tolkien', 'Fantasy', 'Veľmi dobrý stav', 'tomas', ''),
+        book(6, 'Atómové návyky', 'James Clear', 'Osobný rozvoj', 'Ako nová', 'katka', 'Kúpená minulý rok, prečítaná raz.'),
+        book(7, 'Zločin a trest', 'Fiodor M. Dostojevskij', 'Klasika', 'Dobrý stav', 'zuzana', ''),
+        book(8, 'Saturnin', 'Zdeněk Jirotka', 'Humor', 'Dobrý stav', 'jana', 'České vydanie.'),
+        book(9, 'Dievča vo vlaku', 'Paula Hawkinsová', 'Krimi', 'Veľmi dobrý stav', 'lucia', ''),
+        book(10, 'Myslenie, rýchle a pomalé', 'Daniel Kahneman', 'Náučná', 'Veľmi dobrý stav', 'marek', ''),
+        book(11, 'Zlodejka kníh', 'Markus Zusak', 'Román', 'Dobrý stav', 'peter', 'Mierne poškodený prebal.'),
+        book(12, 'Duna', 'Frank Herbert', 'Sci-fi', 'Opotrebovaná', 'tomas', 'Starší paperback, ale kompletný.'),
+        book(13, 'Prostonárodné slovenské povesti', 'Pavol Dobšinský', 'Pre deti', 'Dobrý stav', 'zuzana', ''),
+        book(14, 'Alchymista', 'Paulo Coelho', 'Román', 'Ako nová', 'jana', ''),
+        book(15, 'Šifra majstra Leonarda', 'Dan Brown', 'Krimi', 'Dobrý stav', 'katka', '')
+      ],
+      orders: [],
+      requests: [],
+      wishlist: [{ id: 1, q: 'Kafka na pobreží', added: Date.now() }, { id: 2, q: 'Hobit', added: Date.now() }],
+      notifications: [{ id: 1, text: 'Vitajte! Dostali ste 1 uvítací bod, za ktorý si môžete vziať prvú knihu.', at: Date.now(), read: false }],
+      reservations: {},
+      seen: { wl: false, ex: true }
+    };
+  }
+
+  let state;
+  try { state = JSON.parse(localStorage.getItem(STORE_KEY)) || seed(); } catch (e) { state = seed(); }
+  const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
+
+  let tab = 'katalog';
+  try { const h = location.hash.slice(1); if (['katalog', 'pridat', 'wishlist', 'vymeny'].includes(h)) tab = h; } catch (e) {}
+  let filter = { q: '', genre: '' };
+  let draftPhoto = null;
+
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const norm = s => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const eur = n => n.toFixed(2).replace('.', ',') + ' €';
+  const fmtDate = iso => { const [y, m, d] = iso.slice(0, 10).split('-'); return `${Number(d)}. ${Number(m)}. ${y}`; };
+  const today = () => new Date().toISOString().slice(0, 10);
+  const pts = n => n === 1 ? '1 bod' : (n >= 2 && n <= 4 ? `${n} body` : `${n} bodov`);
+  const code = () => `DK-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(10 + Math.random() * 90)}`;
+  const donorOf = l => l.mine ? { name: 'Vy', city: 'Bratislava', rating: 5, swaps: 0 } : DONORS[l.donor];
+
+  function wishMatches(l) {
+    if (l.mine) return null;
+    return state.wishlist.find(w => { const q = norm(w.q).trim(); return q && (norm(l.title).includes(q) || norm(l.author).includes(q)); }) || null;
+  }
+  function reservedLeft(l) {
+    const r = state.reservations[l.id];
+    if (!r) return 0;
+    const left = r - Date.now();
+    return left > 0 ? left : 0;
+  }
+  const hm = ms => { const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3); return `${h} h ${m} min`; };
+
+  function notify(text) {
+    state.notifications.unshift({ id: Date.now() + Math.random(), text, at: Date.now(), read: false });
+    state.notifications = state.notifications.slice(0, 20);
+  }
+  function toast(text) {
+    const t = document.createElement('div');
+    t.className = 'toast'; t.textContent = text;
+    $('#toasts').appendChild(t);
+    setTimeout(() => t.remove(), 4200);
+  }
+  function stampPoints() {
+    const p = $('#points-pill');
+    p.classList.remove('stamped'); void p.offsetWidth; p.classList.add('stamped');
+  }
+
+  function coverHTML(l, cls = '') {
+    return `<div class="cover ${cls}" style="background:${l.color}" aria-hidden="true">
+      <div><div class="t">${esc(l.title)}</div><div class="rule"></div></div>
+      <div class="a">${esc(l.author)}</div></div>`;
+  }
+
+  /* ---------- Header ---------- */
+  function renderHeader() {
+    document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'));
+    $('#points-pill').innerHTML = `<b>${state.points}</b> ${state.points === 1 ? 'bod' : (state.points >= 2 && state.points <= 4 ? 'body' : 'bodov')}`;
+    $('#credit-pill').innerHTML = `Kredit <b>${eur(state.credit)}</b>`;
+    const unread = state.notifications.filter(n => !n.read).length;
+    $('#bell-n').textContent = unread;
+    const wlMatches = state.listings.filter(l => l.status === 'available' && wishMatches(l)).length;
+    const wd = $('#wl-dot'); wd.hidden = !wlMatches; wd.textContent = wlMatches;
+    const actionable = state.requests.filter(r => r.step === 0).length + state.orders.filter(o => o.step === 3).length;
+    const ed = $('#ex-dot'); ed.hidden = !actionable; ed.textContent = actionable;
+  }
+
+  /* ---------- Catalog ---------- */
+  function renderCatalog() {
+    const q = norm(filter.q).trim();
+    const items = state.listings
+      .filter(l => l.status === 'available')
+      .filter(l => !filter.genre || l.genre === filter.genre)
+      .filter(l => !q || norm(l.title + ' ' + l.author).includes(q))
+      .sort((a, b) => (!!wishMatches(b) - !!wishMatches(a)) || (b.added - a.added));
+    const total = state.listings.filter(l => l.status === 'available').length;
+    return `
+      <section class="intro">
+        <div>
+          <h1>Daruj knihu, <em>vyber si inú.</em> Zadarmo.</h1>
+          <p class="sub">Za každú darovanú knihu, ktorá dorazí k novému čitateľovi, dostanete 1 bod. Za bod si vezmete ktorúkoľvek knihu z katalógu. Platíte iba poštovné cez Packetu. Získanú knihu si môžete nechať, alebo ju po prečítaní poslať ďalej.</p>
+        </div>
+        <ol class="steps">
+          <li><span class="n">1</span><div><b>Naskenujte ISBN</b><span>Kniha je v katalógu za pár sekúnd.</span></div></li>
+          <li><span class="n">2</span><div><b>Odošlite bez tlače</b><span>Zadáte kód v Z-BOXe, štítok netreba.</span></div></li>
+          <li><span class="n">3</span><div><b>Bod po vyzdvihnutí</b><span>Body dostávajú len knihy, o ktoré je záujem.</span></div></li>
+        </ol>
+      </section>
+      <div class="section-head">
+        <div><h2>Katalóg</h2><p class="sub">${total} kníh čaká na nového čitateľa.</p></div>
+      </div>
+      <div class="filters">
+        <input class="field" type="search" id="q" placeholder="Hľadať názov alebo autora" value="${esc(filter.q)}" aria-label="Hľadať">
+        <div class="chips" role="group" aria-label="Žáner">
+          <button class="chip" data-genre="" aria-pressed="${!filter.genre}">Všetko</button>
+          ${GENRES.map(g => `<button class="chip" data-genre="${g}" aria-pressed="${filter.genre === g}">${g}</button>`).join('')}
+        </div>
+      </div>
+      ${items.length ? `<div class="grid">${items.map(cardHTML).join('')}</div>` :
+        `<div class="empty">Nič sme nenašli. Pridajte si knihu na <button class="linkbtn" data-tab="wishlist">wishlist</button> a upozorníme vás, keď ju niekto daruje.</div>`}`;
+  }
+
+  function cardHTML(l) {
+    const d = donorOf(l), m = wishMatches(l), left = reservedLeft(l);
+    return `<button class="card ${m ? 'match' : ''}" data-open="${l.id}">
+      ${coverHTML(l)}
+      <div class="meta">
+        <span class="title">${esc(l.title)}</span>
+        <span class="author">${esc(l.author)}</span>
+        <div class="row">
+          ${m ? `<span class="tag hot">${left ? 'Rezervované pre vás' : 'Z wishlistu'}</span>` : ''}
+          ${l.mine ? '<span class="tag good">Vaša ponuka</span>' : ''}
+          <span class="tag">${esc(l.condition)}</span>
+        </div>
+        <span class="donor">${esc(d.name)}, ${esc(d.city)} · ★ ${d.rating.toFixed(1)}</span>
+      </div>
+    </button>`;
+  }
+
+  /* ---------- Detail modal ---------- */
+  function openDetail(id) {
+    const l = state.listings.find(x => x.id === id);
+    if (!l) return;
+    const d = donorOf(l), m = wishMatches(l), left = reservedLeft(l);
+    const canPoint = state.points >= 1;
+    const price = canPoint ? SHIPPING : SHIPPING + NO_POINT_FEE;
+    const enough = state.credit >= price;
+    const passport = [...l.passport];
+    modal(`
+      <div class="detail">
+        ${coverHTML(l, 'big')}
+        <div class="info">
+          <div>
+            <h2>${esc(l.title)}</h2>
+            <p class="sub" style="margin-top:4px">${esc(l.author)}</p>
+          </div>
+          <div class="row">
+            <span class="tag">${esc(l.genre)}</span>
+            <span class="tag good">${esc(l.condition)}</span>
+            ${m && left ? `<span class="tag hot">Rezervované pre vás ešte ${hm(left)}</span>` : (m ? '<span class="tag hot">Na vašom wishliste</span>' : '')}
+          </div>
+          ${l.note ? `<p style="margin:0">„${esc(l.note)}“</p>` : ''}
+          ${l.photo ? `<img class="photo-prev" src="${l.photo}" alt="Fotka stavu knihy">` : ''}
+          <p class="donor" style="margin:0">Daruje <b>${esc(d.name)}</b> z mesta ${esc(d.city)} · ★ ${d.rating.toFixed(1)} · ${d.swaps} odoslaných kníh</p>
+          ${l.mine ? `<div class="claim"><b>Toto je vaša ponuka.</b><span class="note">Bod dostanete, keď si knihu nový čitateľ vyzdvihne.</span></div>` : `
+          <div class="claim">
+            <div>
+              <label class="l" for="zbox">Kam vám ju pošleme</label>
+              <select class="field w" id="zbox">${ZBOXES.map(z => `<option>${z}</option>`).join('')}</select>
+            </div>
+            <div class="sum">
+              <span>Kniha</span><span>${canPoint ? '1 bod' : 'bez bodu, poplatok ' + eur(NO_POINT_FEE)}</span>
+              <span>Poštovné Packeta do Z-BOXu</span><span>${eur(SHIPPING)}</span>
+              <span class="total">Zaplatíte z kreditu</span><span class="total">${eur(price)}</span>
+            </div>
+            ${!canPoint ? `<div class="warnbox">Nemáte žiadny bod. Knihu si môžete vziať aj bez bodu za poplatok ${eur(NO_POINT_FEE)}, alebo najprv <button class="linkbtn" data-tab="pridat">darujte knihu</button>.</div>` : ''}
+            ${!enough ? `<div class="warnbox">Na kredite máte ${eur(state.credit)}. <button class="linkbtn" data-action="topup">Dobite si kredit</button> a pokračujte.</div>` : ''}
+            <div class="row">
+              <button class="btn primary" data-claim="${l.id}" ${enough ? '' : 'disabled'}>${canPoint ? 'Vziať knihu za 1 bod' : 'Vziať knihu bez bodu'}</button>
+              <span class="note">Darca má 5 dní na odoslanie, inak dostanete bod aj peniaze späť.</span>
+            </div>
+          </div>`}
+        </div>
+      </div>
+      <div style="margin-top:20px">
+        ${passportHTML(l, passport)}
+      </div>`);
+  }
+
+  function passportHTML(l, entries) {
+    return `<div class="passport">
+      <header><b>Pas knihy</b><span>${entries.length ? `${entries.length} ${entries.length === 1 ? 'čitateľ' : (entries.length <= 4 ? 'čitatelia' : 'čitateľov')} pred vami` : 'Táto kniha začína svoju cestu'}</span></header>
+      ${entries.length ? entries.map(e => `<div class="pp-row">
+          <span class="pp-stamp">${fmtDate(e.date)}</span>
+          <div><p><b>${esc(e.who)}</b> <small>· ${esc(e.city)}</small></p>${e.note ? `<p>„${esc(e.note)}“</p>` : ''}</div>
+        </div>`).join('') : `<div class="pp-row"><span class="pp-stamp">${fmtDate(today())}</span><div><p>Budete prvý čitateľ v pase. Ak ju raz pošlete ďalej, môžete ďalšiemu čitateľovi pripísať odkaz.</p></div></div>`}
+    </div>`;
+  }
+
+  function claim(id) {
+    const l = state.listings.find(x => x.id === id);
+    if (!l || l.status !== 'available') return;
+    const usePoint = state.points >= 1;
+    const price = usePoint ? SHIPPING : SHIPPING + NO_POINT_FEE;
+    if (state.credit < price) return;
+    const box = $('#zbox') ? $('#zbox').value : ZBOXES[0];
+    if (usePoint) state.points -= 1;
+    state.credit = Math.round((state.credit - price) * 100) / 100;
+    l.status = 'claimed';
+    delete state.reservations[l.id];
+    state.orders.unshift({ id: Date.now(), listingId: l.id, box, step: 0, created: Date.now(), usedPoint: usePoint, rated: 0 });
+    notify(`Objednali ste knihu ${l.title}. ${DONORS[l.donor].name} ju má odoslať do 5 dní.`);
+    save(); closeModal(); tab = 'vymeny'; render();
+    toast(`Hotovo. ${l.title} je na ceste k vám, sledujte ju v časti Moje výmeny.`);
+  }
+
+  /* ---------- Add book ---------- */
+  function renderAdd() {
+    const mine = state.listings.filter(l => l.mine);
+    return `
+      <div class="section-head">
+        <div><h2>Darovať knihu</h2><p class="sub">Bod dostanete, keď si knihu nový čitateľ vyzdvihne v Z-BOXe. Odoslanie vás nič nestojí.</p></div>
+      </div>
+      <div class="two">
+        <form class="panel stack" id="add-form" novalidate>
+          <div>
+            <label class="l" for="isbn">ISBN (na zadnej strane knihy)</label>
+            <div class="isbn-row">
+              <input class="field" id="isbn" inputmode="numeric" placeholder="978…" autocomplete="off">
+              <button class="btn" type="button" data-action="lookup">Načítať údaje</button>
+            </div>
+            <p class="hint" style="margin:6px 0 0">V aplikácii ISBN naskenujete fotoaparátom. Ukážkové ISBN:
+              ${Object.keys(ISBN_DEMO).map(k => `<button type="button" class="linkbtn mono" data-isbn="${k}">${k}</button>`).join(' · ')}</p>
+          </div>
+          <div><label class="l" for="f-title">Názov</label><input class="field w" id="f-title" required></div>
+          <div><label class="l" for="f-author">Autor</label><input class="field w" id="f-author" required></div>
+          <div><label class="l" for="f-genre">Žáner</label>
+            <select class="field w" id="f-genre">${GENRES.map(g => `<option>${g}</option>`).join('')}</select></div>
+          <div><span class="l">Stav knihy</span>
+            <div class="radios">${CONDITIONS.map((c, i) => `<input type="radio" name="cond" id="cond-${i}" value="${c}" ${i === 1 ? 'checked' : ''}><label for="cond-${i}">${c}</label>`).join('')}</div></div>
+          <div><label class="l" for="f-note">Poznámka pre čitateľa (nepovinné)</label><textarea class="field w" id="f-note" placeholder="Napr. podčiarknuté vety, venovanie na prvej strane"></textarea></div>
+          <div><label class="l" for="f-photo">Fotka stavu (nepovinné)</label>
+            <input type="file" id="f-photo" accept="image/*">
+            ${draftPhoto ? `<div style="margin-top:8px"><img class="photo-prev" src="${draftPhoto}" alt="Náhľad fotky"></div>` : ''}</div>
+          <p class="hint" id="add-err" role="alert" style="margin:0;color:var(--stamp)"></p>
+          <div class="row"><button class="btn primary" type="submit">Pridať do katalógu</button></div>
+        </form>
+        <div class="stack">
+          <h3 style="font-size:20px">Vaše ponuky</h3>
+          ${mine.length ? `<div class="list">${mine.map(l => {
+            const req = state.requests.find(r => r.listingId === l.id);
+            const st = l.status === 'available' ? '<span class="tag">Čaká na čitateľa</span>' :
+              (req && req.step >= 4 ? '<span class="tag good">Doručená, +1 bod</span>' : '<span class="tag hot">Niekto si ju vzal</span>');
+            return `<div class="order">${coverHTML(l)}<div class="stack" style="gap:6px">
+              <h3>${esc(l.title)}</h3><span class="donor">${esc(l.author)} · ${esc(l.condition)}</span>
+              <div class="row">${st}</div>
+              ${l.status === 'available' ? `<div class="row"><button class="btn small" data-sim-claim="${l.id}">Simulovať záujem čitateľa</button></div>` : ''}
+            </div></div>`;
+          }).join('')}</div>` : `<div class="empty">Zatiaľ ste nedarovali žiadnu knihu. Skúste ukážkové ISBN vľavo.</div>`}
+        </div>
+      </div>`;
+  }
+
+  function lookup(isbn) {
+    const clean = String(isbn).replace(/[^0-9X]/gi, '');
+    const hit = ISBN_DEMO[clean];
+    if (!hit) { toast('Toto ISBN v ukážke nepoznáme. Vyplňte názov a autora ručne.'); return; }
+    $('#isbn').value = clean;
+    $('#f-title').value = hit.title;
+    $('#f-author').value = hit.author;
+    $('#f-genre').value = hit.genre;
+    toast(`Načítané: ${hit.title}`);
+  }
+
+  function addBook(e) {
+    e.preventDefault();
+    const title = $('#f-title').value.trim(), author = $('#f-author').value.trim();
+    if (!title || !author) { $('#add-err').textContent = 'Doplňte názov aj autora, alebo načítajte údaje cez ISBN.'; return; }
+    const id = state.nextId++;
+    const l = book(id, title, author, $('#f-genre').value, (document.querySelector('input[name="cond"]:checked') || {}).value || CONDITIONS[1], null, $('#f-note').value.trim());
+    l.mine = true; l.added = Date.now(); l.photo = draftPhoto || null;
+    state.listings.unshift(l);
+    draftPhoto = null;
+    save(); render();
+    toast('Kniha je v katalógu. Bod dostanete, keď si ju nový čitateľ vyzdvihne.');
+  }
+
+  function simulateClaim(id) {
+    const l = state.listings.find(x => x.id === id);
+    if (!l || l.status !== 'available') return;
+    const who = READERS[Math.floor(Math.random() * READERS.length)];
+    const city = Object.values(DONORS).find(d => d.name === who)?.city || 'Bratislava';
+    l.status = 'claimed';
+    state.requests.unshift({ id: Date.now(), listingId: l.id, who, city, code: code(), step: 0, created: Date.now() });
+    notify(`${who} si vzal(a) vašu knihu ${l.title}. Odošlite ju do 5 dní.`);
+    save(); tab = 'vymeny'; render();
+    toast(`${who} si chce prečítať ${l.title}. Podací kód nájdete v časti Moje výmeny.`);
+  }
+
+  /* ---------- Wishlist ---------- */
+  function renderWishlist() {
+    state.seen.wl = true;
+    const next = POOL[state.poolIdx];
+    return `
+      <div class="section-head">
+        <div><h2>Wishlist</h2><p class="sub">Keď niekto daruje knihu z vášho zoznamu, upozorníme vás a na 24 hodín ju podržíme len pre vás.</p></div>
+      </div>
+      <div class="two">
+        <div class="panel stack">
+          <form class="isbn-row" id="wl-form">
+            <input class="field" id="wl-q" placeholder="Názov alebo autor" aria-label="Kniha na wishlist" style="font-family:var(--f-body)">
+            <button class="btn primary" type="submit">Pridať</button>
+          </form>
+          ${state.wishlist.length ? `<div class="list">${state.wishlist.map(w => {
+            const hits = state.listings.filter(l => l.status === 'available' && !l.mine && norm(l.title + ' ' + l.author).includes(norm(w.q).trim()));
+            return `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:10px">
+              <div style="min-width:0"><b>${esc(w.q)}</b><br>
+                ${hits.length ? hits.map(h => `<button class="linkbtn" data-open="${h.id}" style="color:var(--stamp);font-size:14px">Dostupná: ${esc(h.title)} (${esc(DONORS[h.donor].city)})</button>`).join('<br>') : '<span class="hint">Zatiaľ ju nikto neponúka.</span>'}
+              </div>
+              <button class="btn small ghost" data-wl-del="${w.id}" aria-label="Odstrániť ${esc(w.q)}">Odstrániť</button>
+            </div>`;
+          }).join('')}</div>` : '<div class="empty">Wishlist je prázdny.</div>'}
+        </div>
+        <div class="panel stack">
+          <h3 style="font-size:20px">Vyskúšajte upozornenie</h3>
+          <p class="sub" style="margin:0">V skutočnej prevádzke prídu nové knihy od iných darcov samy. Tu môžete simulovať, že niekto práve pridal knihu.</p>
+          ${next ? `<p style="margin:0">Ďalšia ponuka: <b>${esc(next.title)}</b> od ${esc(DONORS[next.donor].name)}</p>
+            <div class="row"><button class="btn" data-action="sim-offer">Simulovať novú ponuku</button></div>` : '<p class="hint" style="margin:0">Všetky ukážkové ponuky sú už v katalógu.</p>'}
+        </div>
+      </div>`;
+  }
+
+  function simulateOffer() {
+    const p = POOL[state.poolIdx];
+    if (!p) return;
+    state.poolIdx++;
+    const id = state.nextId++;
+    const l = book(id, p.title, p.author, p.genre, p.condition, p.donor, p.note);
+    l.added = Date.now();
+    state.listings.unshift(l);
+    const m = wishMatches(l);
+    if (m) {
+      state.reservations[id] = Date.now() + 24 * 3600e3;
+      notify(`${p.title} je v katalógu a 24 hodín je rezervovaná len pre vás.`);
+      toast(`Kniha z vášho wishlistu: ${p.title}. Rezervovali sme ju pre vás na 24 hodín.`);
+    } else {
+      notify(`${DONORS[p.donor].name} pridal(a) novú knihu: ${p.title}.`);
+      toast(`Nová kniha v katalógu: ${p.title}.`);
+    }
+    save(); render();
+  }
+
+  /* ---------- Exchanges ---------- */
+  function trackHTML(step) {
+    return `<ol class="track">${STEPS.map((s, i) => `<li class="${i < step ? 'done' : (i === step ? 'now' : '')}">${s}</li>`).join('')}</ol>`;
+  }
+  function renderExchanges() {
+    const inc = state.orders, out = state.requests;
+    return `
+      <div class="section-head">
+        <div><h2>Moje výmeny</h2><p class="sub">Stav zásielok sa v ostrej verzii aktualizuje sám podľa Packety. Tu ho posúvate tlačidlami.</p></div>
+      </div>
+      <div class="two">
+        <section class="stack">
+          <h3 style="font-size:20px">Knihy, ktoré idú ku mne</h3>
+          ${inc.length ? `<div class="list">${inc.map(o => {
+            const l = state.listings.find(x => x.id === o.listingId);
+            const d = DONORS[l.donor];
+            return `<div class="order">${coverHTML(l)}<div style="min-width:0">
+              <h3>${esc(l.title)}</h3><span class="donor">od ${esc(d.name)} · ${esc(o.box)}</span>
+              ${trackHTML(o.step)}
+              ${o.step === 3 ? `<p class="note" style="margin:0 0 8px">Kód na vyzdvihnutie: <span class="mono">${String(o.id).slice(-6)}</span></p>` : ''}
+              ${o.step < 4 ? `<button class="btn small" data-adv-order="${o.id}">${o.step === 3 ? 'Vyzdvihol som knihu' : 'Simulovať ďalší krok'}</button>` :
+                (o.rated ? `<span class="tag good">Ohodnotené ${'★'.repeat(o.rated)}</span>` :
+                  `<div class="row"><span class="note">Ohodnoťte darcu:</span>${[1, 2, 3, 4, 5].map(n => `<button class="btn small ghost" data-rate="${o.id}:${n}" aria-label="${n} z 5">${'★'.repeat(n)}</button>`).join('')}</div>`)}
+              ${o.step === 4 ? keepHTML(o) : ''}
+            </div></div>`;
+          }).join('')}</div>` : `<div class="empty">Zatiaľ ste si nevzali žiadnu knihu. <button class="linkbtn" data-tab="katalog">Pozrite katalóg</button>.</div>`}
+        </section>
+        <section class="stack">
+          <h3 style="font-size:20px">Knihy, ktoré darujem</h3>
+          ${out.length ? `<div class="list">${out.map(r => {
+            const l = state.listings.find(x => x.id === r.listingId);
+            return `<div class="order">${coverHTML(l)}<div style="min-width:0">
+              <h3>${esc(l.title)}</h3><span class="donor">pre ${esc(r.who)} · ${esc(r.city)}</span>
+              ${trackHTML(r.step === 0 ? 0 : r.step)}
+              ${r.step === 0 ? `<div class="stack" style="gap:8px">
+                  <span class="note">Vložte knihu do obálky, v ktoromkoľvek Z-BOXe zadajte tento kód a vložte ju dnu. Štítok netreba.</span>
+                  <span class="code">${r.code}</span>
+                  <div class="row"><button class="btn small primary" data-adv-req="${r.id}">Odoslal som v Z-BOXe</button></div></div>` :
+                r.step < 4 ? `<button class="btn small" data-adv-req="${r.id}">Simulovať ďalší krok</button>` :
+                `<span class="tag good">${esc(r.who)} si knihu vyzdvihol(a) · +1 bod</span>`}
+            </div></div>`;
+          }).join('')}</div>` : `<div class="empty">Keď si niekto vezme vašu knihu, nájdete tu podací kód. <button class="linkbtn" data-tab="pridat">Darovať knihu</button></div>`}
+        </section>
+      </div>`;
+  }
+
+  function keepHTML(o) {
+    if (o.keep === 'pass') return `<div class="row" style="margin-top:8px"><span class="tag good">Znova v katalógu, putuje ďalej</span></div>`;
+    if (o.keep === 'keep') return `<div class="row" style="margin-top:8px"><span class="tag">Vo vašej knižnici</span><button class="linkbtn note" data-keep="${o.id}:pass">Predsa ju poslať ďalej</button></div>`;
+    return `<div class="stack" style="gap:8px;margin-top:10px">
+      <span class="note">Kniha je vaša. Môžete si ju nechať, alebo ju po prečítaní poslať ďalej a získať za ňu bod.</span>
+      <div class="row"><button class="btn small" data-keep="${o.id}:keep">Nechám si ju</button><button class="btn small primary" data-keep="${o.id}:pass">Pošlem ju ďalej</button></div></div>`;
+  }
+  function setKeep(id, choice) {
+    const o = state.orders.find(x => x.id === id);
+    if (!o || o.keep === 'pass') return;
+    o.keep = choice;
+    if (choice === 'pass') {
+      const src = state.listings.find(x => x.id === o.listingId);
+      const nl = book(state.nextId++, src.title, src.author, src.genre, src.condition, null, '', src.passport.map(p => ({ ...p })));
+      nl.mine = true; nl.added = Date.now(); nl.color = src.color;
+      state.listings.unshift(nl);
+      toast(`${src.title} je znova v katalógu. Bod dostanete, keď si ju ďalší čitateľ vyzdvihne.`);
+    } else {
+      toast('Kniha zostáva vo vašej knižnici. Ďalej ju môžete poslať kedykoľvek neskôr.');
+    }
+    save(); render();
+  }
+
+  function advanceOrder(id) {
+    const o = state.orders.find(x => x.id === id);
+    if (!o || o.step >= 4) return;
+    o.step++;
+    const l = state.listings.find(x => x.id === o.listingId);
+    if (o.step === 3) { notify(`${l.title} je pripravená vo vašom Z-BOXe.`); toast('Kniha čaká vo vašom Z-BOXe.'); }
+    if (o.step === 4) {
+      l.passport.push({ who: 'Vy', city: 'Bratislava', date: today(), note: '' });
+      notify(`Vyzdvihli ste ${l.title}. ${DONORS[l.donor].name} dostal(a) bod.`);
+      toast(`Príjemné čítanie! ${DONORS[l.donor].name} práve dostal(a) za knihu bod.`);
+    }
+    save(); render();
+  }
+  function advanceRequest(id) {
+    const r = state.requests.find(x => x.id === id);
+    if (!r || r.step >= 4) return;
+    r.step = r.step === 0 ? 1 : r.step + 1;
+    const l = state.listings.find(x => x.id === r.listingId);
+    if (r.step === 1) toast('Odoslané. Bod pripíšeme, keď si knihu príjemca vyzdvihne.');
+    if (r.step === 4) {
+      state.points += 1;
+      l.passport.push({ who: r.who, city: r.city, date: today(), note: '' });
+      notify(`${r.who} si vyzdvihol(a) ${l.title}. Pripísali sme vám 1 bod.`);
+      toast(`+1 bod. ${l.title} dorazila k novému čitateľovi.`);
+      save(); render(); stampPoints(); return;
+    }
+    save(); render();
+  }
+
+  /* ---------- Modal, notifications ---------- */
+  function modal(html) {
+    $('#modal-root').innerHTML = `<div class="scrim" data-scrim><div class="modal" role="dialog" aria-modal="true"><button class="x" data-action="close" aria-label="Zavrieť">×</button>${html}</div></div>`;
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => { const f = $('#modal-root .x'); f && f.focus(); }, 0);
+  }
+  function closeModal() { $('#modal-root').innerHTML = ''; document.body.style.overflow = ''; }
+
+  function topup() {
+    modal(`<h2 style="font-size:24px;padding-right:40px">Dobiť kredit</h2>
+      <p class="sub">Poštovné platíte z kreditu. Dobitie naraz šetrí poplatky platobnej brány, ktoré by pri platbe 2,99 € zjedli takmer celú sumu.</p>
+      <p>Aktuálne máte <b>${eur(state.credit)}</b>.</p>
+      <div class="row">${[10, 20, 30].map(v => `<button class="btn ${v === 10 ? 'primary' : ''}" data-topup="${v}">Dobiť ${v} €</button>`).join('')}</div>
+      <p class="note">V ukážke sa nič neplatí, kredit sa len pripíše.</p>`);
+  }
+  function explainPoints() {
+    modal(`<h2 style="font-size:24px;padding-right:40px">Vaše body: ${state.points}</h2>
+      <p class="sub">1 bod = 1 kniha. Bod získate, keď si knihu, ktorú ste darovali, nový čitateľ vyzdvihne. Za knihy, o ktoré nikto nestojí, body nevznikajú, preto je katalóg plný kníh, ktoré ľudia naozaj chcú.</p>
+      <div class="row"><button class="btn primary" data-tab="pridat">Darovať knihu</button><button class="btn" data-tab="katalog">Vybrať si knihu</button></div>`);
+  }
+  function toggleBell() {
+    const p = $('#notif-panel');
+    if (!p.hidden) { p.hidden = true; return; }
+    p.innerHTML = state.notifications.length ? state.notifications.map(n => `<div class="n-item">${esc(n.text)}<time>${new Date(n.at).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</time></div>`).join('') : '<div class="n-item">Žiadne upozornenia.</div>';
+    p.hidden = false;
+    state.notifications.forEach(n => n.read = true);
+    save(); renderHeader();
+  }
+
+  /* ---------- Render + events ---------- */
+  function render() {
+    const v = $('#view');
+    v.innerHTML = tab === 'pridat' ? renderAdd() : tab === 'wishlist' ? renderWishlist() : tab === 'vymeny' ? renderExchanges() : renderCatalog();
+    renderHeader();
+  }
+  function go(t) {
+    tab = t; closeModal(); $('#notif-panel').hidden = true;
+    try { history.replaceState(null, '', '#' + t); } catch (e) {}
+    render(); window.scrollTo({ top: 0 });
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-tab],[data-action],[data-open],[data-claim],[data-genre],[data-isbn],[data-sim-claim],[data-wl-del],[data-adv-order],[data-adv-req],[data-rate],[data-topup],[data-keep],[data-scrim]');
+    if (!t) { if (!e.target.closest('#notif-panel')) $('#notif-panel').hidden = true; return; }
+    if (t.hasAttribute('data-scrim') && e.target !== t) return;
+    if (t.dataset.tab) { e.preventDefault(); go(t.dataset.tab); return; }
+    if (t.dataset.open) { openDetail(Number(t.dataset.open)); return; }
+    if (t.dataset.claim) { claim(Number(t.dataset.claim)); return; }
+    if (t.dataset.genre !== undefined) { filter.genre = t.dataset.genre; render(); return; }
+    if (t.dataset.isbn) { lookup(t.dataset.isbn); return; }
+    if (t.dataset.simClaim) { simulateClaim(Number(t.dataset.simClaim)); return; }
+    if (t.dataset.wlDel) { state.wishlist = state.wishlist.filter(w => w.id !== Number(t.dataset.wlDel)); save(); render(); return; }
+    if (t.dataset.advOrder) { advanceOrder(Number(t.dataset.advOrder)); return; }
+    if (t.dataset.advReq) { advanceRequest(Number(t.dataset.advReq)); return; }
+    if (t.dataset.rate) { const [id, n] = t.dataset.rate.split(':').map(Number); const o = state.orders.find(x => x.id === id); if (o) { o.rated = n; save(); render(); toast('Ďakujeme za hodnotenie.'); } return; }
+    if (t.dataset.keep) { const [id, ch] = t.dataset.keep.split(':'); setKeep(Number(id), ch); return; }
+    if (t.dataset.topup) { state.credit += Number(t.dataset.topup); save(); closeModal(); renderHeader(); toast(`Kredit dobitý o ${t.dataset.topup} €.`); return; }
+    if (t.hasAttribute('data-scrim')) { closeModal(); return; }
+    switch (t.dataset.action) {
+      case 'close': closeModal(); break;
+      case 'topup': topup(); break;
+      case 'explain-points': explainPoints(); break;
+      case 'bell': e.stopPropagation(); toggleBell(); break;
+      case 'lookup': lookup($('#isbn').value); break;
+      case 'sim-offer': simulateOffer(); break;
+      case 'reset': state = seed(); filter = { q: '', genre: '' }; draftPhoto = null; save(); go('katalog'); toast('Ukážka začína odznova.'); break;
+    }
+  });
+  document.addEventListener('input', e => {
+    if (e.target.id === 'q') {
+      filter.q = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const q = $('#q'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (err) {}
+    }
+  });
+  document.addEventListener('change', e => {
+    if (e.target.id === 'f-photo' && e.target.files && e.target.files[0]) {
+      const keep = { t: $('#f-title').value, a: $('#f-author').value, g: $('#f-genre').value, n: $('#f-note').value, i: $('#isbn').value };
+      const r = new FileReader();
+      r.onload = () => {
+        draftPhoto = r.result; render();
+        $('#f-title').value = keep.t; $('#f-author').value = keep.a; $('#f-genre').value = keep.g; $('#f-note').value = keep.n; $('#isbn').value = keep.i;
+      };
+      r.readAsDataURL(e.target.files[0]);
+    }
+  });
+  document.addEventListener('submit', e => {
+    if (e.target.id === 'add-form') addBook(e);
+    if (e.target.id === 'wl-form') {
+      e.preventDefault();
+      const q = $('#wl-q').value.trim();
+      if (!q) return;
+      state.wishlist.unshift({ id: Date.now(), q, added: Date.now() });
+      save(); render();
+      const hit = state.listings.find(l => l.status === 'available' && !l.mine && norm(l.title + ' ' + l.author).includes(norm(q)));
+      toast(hit ? `${hit.title} už v katalógu je.` : 'Pridané. Upozorníme vás, keď ju niekto daruje.');
+    }
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#notif-panel').hidden = true; } });
+
+  render();
+})();
+</script>
+</body>
+</html>
